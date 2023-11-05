@@ -11,7 +11,7 @@ public class ShuffleTool {
         shuffle(res, new ArrayList<>(), tx1.statements, n1, 0, tx2.statements, n2, 0);
         return res;
     }
-
+    // 枚举生成所有可能的提交顺序
     public static void shuffle(ArrayList<ArrayList<StatementCell>> res, ArrayList<StatementCell> cur,
                          ArrayList<StatementCell> txn1, int txn1Len, int txn1Idx, ArrayList<StatementCell> txn2,
                          int txn2Len, int txn2Idx) {
@@ -32,6 +32,7 @@ public class ShuffleTool {
     }
 
     public static ArrayList<ArrayList<StatementCell>> sampleSubmittedTrace(Transaction tx1, Transaction tx2, int count) {
+        // 蓄水池抽样算法，从所有可能的提交顺序中选择count个
         ArrayList<ArrayList<StatementCell>> allSubmittedTrace = genAllSubmittedTrace(tx1, tx2);
         int n = allSubmittedTrace.size();
         if (n <= count) {

@@ -151,7 +151,10 @@ public class StatementCell {
             boolean match = rs.next();
             statement.close();
             rs.close();
+            // 如果查询返回了结果，说明当前where子句已经可以选择行ID为rowId的指定行。
             if (match) return;
+            // 类似于PQS，给Where条件加上IS NULL或者NOT以确保能够查询到rowId的指定行。
+            // 不过这里不是约束求解，而是直接查询数据库。
             query = String.format("SELECT (%s) FROM %s WHERE %s = %d",
                     this.whereClause, TableTool.TableName, TableTool.RowIdColName, rowId);
             statement = TableTool.conn.createStatement();

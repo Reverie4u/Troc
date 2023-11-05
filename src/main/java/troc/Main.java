@@ -29,6 +29,7 @@ public class Main {
         TableTool.initialize(options);
         Transaction tx1, tx2;
         if (options.isSetCase()) {
+            // 从文件或命令行读取事务
             Scanner scanner;
             if (options.getCaseFile().equals("")) {
                 log.info("Read database and transactions from command line");
@@ -42,11 +43,15 @@ public class Main {
                     throw new RuntimeException("Read case from file failed: ", e);
                 }
             }
+            // 执行文件中或命令行输入的建表语句
             TableTool.prepareTableFromScanner(scanner);
+            // 对表进行预处理
             TableTool.preProcessTable();
             log.info("Initial table:\n{}", TableTool.tableToView());
+            // 读取两个事务
             tx1 = TableTool.readTransactionFromScanner(scanner, 1);
             tx2 = TableTool.readTransactionFromScanner(scanner, 2);
+            // 读取提交顺序
             String scheduleStr = TableTool.readScheduleFromScanner(scanner);
             scanner.close();
             log.info("Read transactions from file:\n{}{}", tx1, tx2);
@@ -54,12 +59,14 @@ public class Main {
             TrocChecker checker = new TrocChecker(tx1, tx2);
             if (!scheduleStr.equals("")) {
                 log.info("Get schedule from file: {}", scheduleStr);
+                // 根据读取的提交顺序进行check
                 checker.checkSchedule(scheduleStr);
             } else {
                 checker.checkAll();
             }
         } else {
             while (true) {
+                // 循环fuzzing
                 log.info("Create new table.");
                 try {
                     Thread.sleep(1000);
@@ -78,15 +85,19 @@ public class Main {
                     try {
                         Thread.sleep(1000);
                     } catch (InterruptedException e) {}
+                    // 恢复原始table
                     TableTool.recoverOriginalTable();
+                    // 生成两个事务
                     tx1 = table.genTransaction(1);
                     tx2 = table.genTransaction(2);
+                    // 手动构建冲突
                     TableTool.makeConflict(tx1, tx2);
                     TableTool.bugReport.setTx1(tx1);
                     TableTool.bugReport.setTx2(tx2);
                     log.info("Transaction 1:\n{}", tx1);
                     log.info("Transaction 2:\n{}", tx2);
                     TrocChecker checker = new TrocChecker(tx1, tx2);
+                    // 随机生成提交顺序
                     checker.checkRandom();
                 }
             }

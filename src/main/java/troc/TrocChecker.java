@@ -47,11 +47,13 @@ public class TrocChecker {
     }
 
     public void checkRandom(int count) {
+        // 随机抽样count种提交顺序
         ArrayList<ArrayList<StatementCell>> submittedOrderList = ShuffleTool.sampleSubmittedTrace(tx1, tx2, count);
         for (ArrayList<StatementCell> submittedOrder : submittedOrderList) {
             try {
                 Thread.sleep(1000);
             } catch (InterruptedException e) {}
+            // check每一种提交顺序
             oracleCheck(submittedOrder);
         }
     }
@@ -66,12 +68,15 @@ public class TrocChecker {
     private boolean oracleCheck(ArrayList<StatementCell> schedule) {
         TableTool.allCase++;
         log.info("Check new schedule.");
+        // 将origin表复制到troc表
         TableTool.recoverOriginalTable();
         bugInfo = "";
+        // 1.正常执行的结果
         TxnPairExecutor executor = new TxnPairExecutor(scheduleClone(schedule), tx1, tx2);
         TxnPairResult execResult = executor.getResult();
         // ArrayList<StatementCell> mvccSchedule = inferOracleOrderMVCC(scheduleClone(schedule));
         // TxnPairResult mvccResult = obtainOracleResults(mvccSchedule);
+        // 2.通过外部MVCC获取的结果
         TxnPairResult mvccResult = inferOracleMVCC(scheduleClone(schedule));
         bugInfo = " -- MVCC Error \n";
         if (TableTool.options.isSetCase()) {
@@ -115,6 +120,7 @@ public class TrocChecker {
     }
 
     private TxnPairResult inferOracleMVCC(ArrayList<StatementCell> schedule) {
+        // 将origin表复制到troc表
         TableTool.recoverOriginalTable();
         isDeadlock = false;
         ArrayList<StatementCell> oracleOrder = new ArrayList<>();
@@ -122,6 +128,7 @@ public class TrocChecker {
         tx1.clearStates();
         tx2.clearStates();
         vData = TableTool.initVersionData();
+        // 初始状态每一行只有一个版本
         for (StatementCell stmt : schedule) {
             Transaction curTx = stmt.tx;
             Transaction otherTx = curTx == tx1 ? tx2 : tx1;

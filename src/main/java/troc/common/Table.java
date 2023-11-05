@@ -188,9 +188,13 @@ public abstract class Table {
         tx.setStatements(statementList);
         return tx;
     }
-
+    /**
+     * 生成随机的SQL语句
+     * @return
+     */
     public String genStatement() {
         String statement;
+        // 重复以生成合法的语句
         do {
             while (true) {
                 if (Randomly.getBooleanWithRatherLowProbability()) {

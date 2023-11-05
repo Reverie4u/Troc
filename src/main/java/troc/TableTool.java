@@ -75,6 +75,7 @@ public class TableTool {
     }
 
     static void prepareTableFromScanner(Scanner input) {
+        // 删除掉troc表，如果存在的话, troc表用于
         TableTool.executeOnTable("DROP TABLE IF EXISTS " + TableName);
         String sql;
         do {
@@ -192,15 +193,22 @@ public class TableTool {
             throw new RuntimeException("Fetch metadata of table failed:", e);
         }
     }
-
+    /**
+     * 制造冲突，让两个事务尝试修改同一行数据
+     * @param tx1
+     * @param tx2
+     */
     static void makeConflict(Transaction tx1, Transaction tx2) {
         StatementCell stmt1 = randomStmtWithCondition(tx1);
         StatementCell stmt2 = randomStmtWithCondition(tx2);
-        int n = getNewRowId();
+        int n = getNewRowId(); // 当前表的最大rowId+1
         if (Randomly.getBoolean() || n == 0) {
+            // Randomly.getBoolean()有50%概率为true
+            // 将一条语句的where条件变成和另一条语句一样
             stmt1.whereClause = stmt2.whereClause;
             stmt1.recomputeStatement();
         } else {
+            // 随机选取一行数据，确保两个事务都能修改到
             int rowId = Randomly.getNextInt(1, n);
             try {
                 stmt1.makeChooseRow(rowId);
@@ -222,6 +230,7 @@ public class TableTool {
     }
 
     static HashMap<Integer, ArrayList<Version>> initVersionData() {
+        // 首先用表数据初始化外部版本链
         HashMap<Integer, ArrayList<Version>> vData = new HashMap<>();
         String query = "SELECT * FROM " + TableName;
         TableTool.executeQueryWithCallback(query, rs -> {
