@@ -6,3 +6,4 @@ troc.iml
 .factorypath
 .project
 .vscode/
+*.out
