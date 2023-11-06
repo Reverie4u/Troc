@@ -79,9 +79,9 @@ public class Main {
                 TableTool.bugReport.setInitializeStatements(table.getInitializeStatements());
                 TableTool.bugReport.setInitialTable(TableTool.tableToView().toString());
                 log.info("Initial table:\n{}", TableTool.tableToView());
-                TableTool.txPairHasConflict = false;
                 for (int _i = 0; _i < 5; _i++) {
                     log.info("Generate new transaction pair.");
+                    TableTool.txPairHasConflict = false;
                     TableTool.txPair++;
                     try {
                         Thread.sleep(1000);
@@ -100,9 +100,9 @@ public class Main {
                     TrocChecker checker = new TrocChecker(tx1, tx2);
                     // 随机生成提交顺序
                     checker.checkRandom();
-                }
-                if(TableTool.txPairHasConflict){
-                    TableTool.conflictTxPair++;
+                    if(TableTool.txPairHasConflict){
+                        TableTool.conflictTxPair++;
+                    }
                 }
                 log.info("txPair:{}, conflictTxPair:{}, allCase:{}, conflictCase:{}", 
                         TableTool.txPair, TableTool.conflictTxPair, TableTool.allCase, TableTool.conflictCase);
