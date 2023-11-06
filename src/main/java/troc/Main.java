@@ -27,6 +27,7 @@ public class Main {
                TableTool.cleanTrocTables();
            } 
         });
+        myThread.start();
         try {
             myThread.join(options.getTimeout()*1000L);
         } catch (InterruptedException e) {
