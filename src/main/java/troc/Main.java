@@ -117,8 +117,6 @@ public class Main {
                         TableTool.conflictTxPair++;
                     }
                 }
-                log.info("txPair:{}, conflictTxPair:{}, allCase:{}, conflictCase:{}", 
-                        TableTool.txPair, TableTool.conflictTxPair, TableTool.allCase, TableTool.conflictCase);
             }
         }
     }

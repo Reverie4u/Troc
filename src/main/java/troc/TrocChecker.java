@@ -55,6 +55,8 @@ public class TrocChecker {
             } catch (InterruptedException e) {}
             // check每一种提交顺序
             oracleCheck(submittedOrder);
+            log.info("txPair:{}, conflictTxPair:{}, allCase:{}, conflictCase:{}", 
+                        TableTool.txPair, TableTool.conflictTxPair, TableTool.allCase, TableTool.conflictCase);
         }
     }
 
