@@ -79,6 +79,7 @@ public class Main {
                 TableTool.bugReport.setInitializeStatements(table.getInitializeStatements());
                 TableTool.bugReport.setInitialTable(TableTool.tableToView().toString());
                 log.info("Initial table:\n{}", TableTool.tableToView());
+                TableTool.txPairHasConflict = false;
                 for (int _i = 0; _i < 5; _i++) {
                     log.info("Generate new transaction pair.");
                     TableTool.txPair++;
@@ -100,6 +101,11 @@ public class Main {
                     // 随机生成提交顺序
                     checker.checkRandom();
                 }
+                if(TableTool.txPairHasConflict){
+                    TableTool.conflictTxPair++;
+                }
+                log.info("txPair:{}, conflictTxPair:{}, allCase:{}, conflictCase:{}", 
+                        TableTool.txPair, TableTool.conflictTxPair, TableTool.allCase, TableTool.conflictCase);
             }
         }
     }

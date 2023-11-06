@@ -129,6 +129,7 @@ public class TrocChecker {
         tx2.clearStates();
         vData = TableTool.initVersionData();
         // 初始状态每一行只有一个版本
+        boolean hasConflict = false;
         for (StatementCell stmt : schedule) {
             Transaction curTx = stmt.tx;
             Transaction otherTx = curTx == tx1 ? tx2 : tx1;
@@ -138,6 +139,7 @@ public class TrocChecker {
             }
             boolean blocked = analyzeStmt(stmt, curTx, otherTx);
             if (blocked) {
+                hasConflict = true;
                 StatementCell blockPoint = stmt.copy();
                 blockPoint.blocked = true;
                 oracleOrder.add(blockPoint);
@@ -158,6 +160,10 @@ public class TrocChecker {
                 tx2.clearStates();
                 break;
             }
+        }
+        if(hasConflict){
+            TableTool.txPairHasConflict = true;
+            TableTool.conflictCase++;
         }
         TableTool.viewToTable(newestView());
         ArrayList<Object> finalState = TableTool.getFinalStateAsList();
