@@ -425,6 +425,7 @@ public class TrocChecker {
         View view = new View();
         for (int rowId : vData.keySet()) {
             ArrayList<Version> versions = vData.get(rowId);
+            // 这个地方会偶然性地报数组越界
             Version version = versions.get(versions.size()-1);
             if (!version.deleted) {
                 view.data.put(rowId, version.data);

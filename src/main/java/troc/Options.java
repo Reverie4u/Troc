@@ -32,4 +32,7 @@ public class Options {
 
     @Parameter(names = "--port", description = "The port used to log into the DBMS")
     private int port = 3306;
+
+    @Parameter(names = "--timeout", description = "The timeout of fuzzer, in seconds")
+    private long timeout = 86400;
 }

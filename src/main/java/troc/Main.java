@@ -20,9 +20,18 @@ public class Main {
         verifyOptions(options);
         log.info(String.format("Run tests for %s in [DB %s]-[Table %s] on [%s:%d]",
                 options.getDBMS(), options.getDbName(), options.getTableName(), options.getHost(), options.getPort()));
-
-        txnTesting(options);
-        TableTool.cleanTrocTables();
+        Thread myThread = new Thread(()->{
+           try {
+               txnTesting(options);
+           } finally {
+               TableTool.cleanTrocTables();
+           } 
+        });
+        try {
+            myThread.join(options.getTimeout()*1000L);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 
     private static void txnTesting(Options options) {
