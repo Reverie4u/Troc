@@ -4,7 +4,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 
 public class View {
-    HashMap<Integer, Object[]> data;
+    HashMap<Integer, Object[]> data; // 由rowId -> 版本链的map
     HashMap<Integer, Boolean> deleted; // may be null
 
     View() {

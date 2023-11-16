@@ -485,6 +485,7 @@ public class TrocChecker {
                 if (!vData.containsKey(rowId)) {
                     vData.put(rowId, new ArrayList<>());
                 }
+                // 可能出现空指针异常
                 vData.get(rowId).add(new Version(data.clone(), curTx, deleted));
             }
         }
