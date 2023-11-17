@@ -55,6 +55,8 @@ public class TrocChecker {
             } catch (InterruptedException e) {}
             // check每一种提交顺序
             oracleCheck(submittedOrder);
+            log.info("txPair:{}, conflictTxPair:{}, allCase:{}, conflictCase:{}", 
+                        TableTool.txPair, TableTool.conflictTxPair, TableTool.allCase, TableTool.conflictCase);
         }
     }
 
@@ -130,6 +132,7 @@ public class TrocChecker {
         tx2.clearStates();
         vData = TableTool.initVersionData();
         // 初始状态每一行只有一个版本
+        boolean hasConflict = false;
         for (StatementCell stmt : schedule) {
             Transaction curTx = stmt.tx;
             Transaction otherTx = curTx == tx1 ? tx2 : tx1;
@@ -139,6 +142,7 @@ public class TrocChecker {
             }
             boolean blocked = analyzeStmt(stmt, curTx, otherTx);
             if (blocked) {
+                hasConflict = true;
                 StatementCell blockPoint = stmt.copy();
                 blockPoint.blocked = true;
                 oracleOrder.add(blockPoint);
@@ -159,6 +163,10 @@ public class TrocChecker {
                 tx2.clearStates();
                 break;
             }
+        }
+        if(hasConflict){
+            TableTool.txPairHasConflict = true;
+            TableTool.conflictCase++;
         }
         TableTool.viewToTable(newestView());
         ArrayList<Object> finalState = TableTool.getFinalStateAsList();
@@ -420,6 +428,10 @@ public class TrocChecker {
         View view = new View();
         for (int rowId : vData.keySet()) {
             ArrayList<Version> versions = vData.get(rowId);
+            // 这个地方会偶然性地报数组越界
+            if(versions.isEmpty()){
+                continue;
+            }
             Version version = versions.get(versions.size()-1);
             if (!version.deleted) {
                 view.data.put(rowId, version.data);

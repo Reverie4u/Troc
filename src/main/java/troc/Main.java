@@ -23,6 +23,19 @@ public class Main {
 
         txnTesting(options);
         TableTool.cleanTrocTables();
+        // Thread myThread = new Thread(()->{
+        //    try {
+        //        txnTesting(options);
+        //    } finally {
+        //        TableTool.cleanTrocTables();
+        //    } 
+        // });
+        // myThread.start();
+        // try {
+        //     myThread.join(options.getTimeout()*1000L);
+        // } catch (InterruptedException e) {
+        //     e.printStackTrace();
+        // }
     }
 
     private static void txnTesting(Options options) {
@@ -82,6 +95,7 @@ public class Main {
                 log.info("Initial table:\n{}", TableTool.tableToView());
                 for (int _i = 0; _i < 5; _i++) {
                     log.info("Generate new transaction pair.");
+                    TableTool.txPairHasConflict = false;
                     TableTool.txPair++;
                     try {
                         Thread.sleep(1000);
@@ -100,6 +114,9 @@ public class Main {
                     TrocChecker checker = new TrocChecker(tx1, tx2);
                     // 随机生成提交顺序
                     checker.checkRandom();
+                    if(TableTool.txPairHasConflict){
+                        TableTool.conflictTxPair++;
+                    }
                 }
             }
         }

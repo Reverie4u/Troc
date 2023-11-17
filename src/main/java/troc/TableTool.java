@@ -21,7 +21,10 @@ public class TableTool {
     static public final Randomly rand = new Randomly();
     static public final BugReport bugReport = new BugReport();
     static public int txPair = 0;
+    static public int conflictTxPair = 0;
+    static public boolean txPairHasConflict = false;
     static public int allCase = 0;
+    static public int conflictCase = 0;;
     static public int skipCase = 0;
 
     static public List<IsolationLevel> possibleIsolationLevels;
