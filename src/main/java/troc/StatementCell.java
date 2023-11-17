@@ -146,6 +146,7 @@ public class StatementCell {
         try {
             query = String.format("SELECT * FROM %s WHERE (%s) AND %s = %d",
                     TableTool.TableName, this.whereClause, TableTool.RowIdColName, rowId);
+            log.info(query);
             statement = TableTool.conn.createStatement();
             rs = statement.executeQuery(query);
             boolean match = rs.next();
@@ -157,9 +158,11 @@ public class StatementCell {
             // 不过这里不是约束求解，而是直接查询数据库。
             query = String.format("SELECT (%s) FROM %s WHERE %s = %d",
                     this.whereClause, TableTool.TableName, TableTool.RowIdColName, rowId);
+            log.info(query);
             statement = TableTool.conn.createStatement();
             rs = statement.executeQuery(query);
             if (!rs.next()) {
+                // 为什么会出现没有结果？
                 log.info("Choose row failed, rowId:{}, statement:{}", rowId, this.statement);
                 return;
             }

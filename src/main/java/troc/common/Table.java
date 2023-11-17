@@ -3,6 +3,7 @@ package troc.common;
 import lombok.extern.slf4j.Slf4j;
 import troc.*;
 
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -18,6 +19,7 @@ public abstract class Table {
     protected final HashMap<String, Column> columns;
     protected int indexCnt = 0;
     protected ExprGen exprGenerator;
+    protected int initRowCount = 0;
 
     public Table(String tableName) {
         this.tableName = tableName;
@@ -27,6 +29,9 @@ public abstract class Table {
         initializeStatements = new ArrayList<>();
         columnNames = new ArrayList<>();
         columns = new HashMap<>();
+    }
+    public int getInitRowCount() {
+        return initRowCount;
     }
 
     public String getCreateTableSql() {
@@ -67,6 +72,7 @@ public abstract class Table {
         while (!this.create()) {
             log.info("Create table failed, {}", getCreateTableSql());
         }
+        // 随机生成创建索引/插入语句
         for (int i = 0; i < Randomly.getNextInt(5, 15); i++) {
             String initSQL;
             if (Randomly.getNextInt(0, 15) == 10) {
@@ -77,6 +83,9 @@ public abstract class Table {
             initializeStatements.add(initSQL);
             TableTool.executeOnTable(initSQL);
         }
+        String query = "SELECT COUNT(*) FROM " + tableName;
+        initRowCount = TableTool.executeQueryReturnInteger(query);
+        log.info("Rowcount: {}", initRowCount);
     }
 
     public String genSelectStatement() {

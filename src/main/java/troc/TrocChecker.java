@@ -67,7 +67,7 @@ public class TrocChecker {
 
     private boolean oracleCheck(ArrayList<StatementCell> schedule) {
         TableTool.allCase++;
-        log.info("Check new schedule.");
+        log.info("Check new schedule:{}", schedule);
         // 将origin表复制到troc表
         TableTool.recoverOriginalTable();
         bugInfo = "";
@@ -111,6 +111,7 @@ public class TrocChecker {
         return String.join("-", order);
     }
 
+    // schedule的一个备份，方便修改而不影响原始list
     private ArrayList<StatementCell> scheduleClone(ArrayList<StatementCell> schedule) {
         ArrayList<StatementCell> copied = new ArrayList<>();
         for (StatementCell stmt : schedule) {
@@ -460,6 +461,7 @@ public class TrocChecker {
         if (curTx.isolationlevel == IsolationLevel.REPEATABLE_READ) {
             allView = buildTxView(curTx, otherTx, true);
         }
+        // 获取影响行数
         HashSet<Integer> rowIds = getAffectedRows(stmt, allView);
         String snapshotName = "update_version";
         TableTool.takeSnapshotForTable(snapshotName);

@@ -1,6 +1,7 @@
 package troc;
 
 import lombok.extern.slf4j.Slf4j;
+import troc.common.Table;
 
 import java.sql.*;
 import java.util.*;
@@ -26,7 +27,7 @@ public class TableTool {
     static public List<IsolationLevel> possibleIsolationLevels;
     static public SQLConnection conn;
     static public Options options;
-    static public String TableName = "troc";
+    static public String TableName = "troc"; // 该表名可以由用户指定
     static public String DatabaseName = "test";
     static public DBMS dbms;
     static int ColCount;
@@ -52,13 +53,14 @@ public class TableTool {
             possibleIsolationLevels.add(IsolationLevel.SERIALIZABLE);
         }
     }
-
+    /**
+     * 创建JDBC连接
+     * @param options
+     * @return
+     */
     static SQLConnection getConnectionFromOptions(Options options) {
         Connection con;
         try {
-//            String url = String.format("jdbc:%s://%s:%d/%s", dbms.getProtocol(), options.getHost(),
-//                    options.getPort(), options.getDbName());
-//            con = DriverManager.getConnection(url, options.getUserName(), options.getPassword());
             String url = String.format("jdbc:%s://%s:%d/", dbms.getProtocol(), options.getHost(),
                     options.getPort());
             con = DriverManager.getConnection(url, options.getUserName(), options.getPassword());
@@ -75,7 +77,7 @@ public class TableTool {
     }
 
     static void prepareTableFromScanner(Scanner input) {
-        // 删除掉troc表，如果存在的话, troc表用于
+        // 删除掉troc表，如果存在的话
         TableTool.executeOnTable("DROP TABLE IF EXISTS " + TableName);
         String sql;
         do {
@@ -85,6 +87,9 @@ public class TableTool {
         } while (true);
     }
 
+    /** 
+     * 从输入流中读取事务
+     */
     static Transaction readTransactionFromScanner(Scanner input, int txId) {
         Transaction tx = new Transaction(txId);
         tx.conn = genConnection();
@@ -101,6 +106,11 @@ public class TableTool {
         return tx;
     }
 
+    /**
+     * 从输入流中读取提交顺序
+     * @param input
+     * @return
+     */
     static String readScheduleFromScanner(Scanner input) {
         do {
             if (!input.hasNext()) break;
@@ -112,12 +122,18 @@ public class TableTool {
         return "";
     }
 
+    /**
+     * 对表进行预处理
+     */
     public static void preProcessTable() {
         addRowIdColumnAndFill();
         backupOriginalTable();
         fillTableMetaData();
     }
 
+    /**
+     * 为表添加rid列
+     */
     private static void addRowIdColumnAndFill() {
         AtomicBoolean hasRowIdCol = new AtomicBoolean(false);
         String query = "SELECT * FROM " + TableName;
@@ -144,6 +160,9 @@ public class TableTool {
         fillAllRowId();
     }
 
+    /**
+     * 将数据库表的元数据提取出来
+     */
     private static void fillTableMetaData() {
         nextRowId = getMaxRowId() + 1;
         colNames = new ArrayList<>();
@@ -198,10 +217,12 @@ public class TableTool {
      * @param tx1
      * @param tx2
      */
-    static void makeConflict(Transaction tx1, Transaction tx2) {
+    static void makeConflict(Transaction tx1, Transaction tx2, Table table) {
         StatementCell stmt1 = randomStmtWithCondition(tx1);
         StatementCell stmt2 = randomStmtWithCondition(tx2);
-        int n = getNewRowId(); // 当前表的最大rowId+1
+        // n有问题
+        // int n = getNewRowId(); // 当前表的最大rowId+1
+        int n = table.getInitRowCount()+1;
         if (Randomly.getBoolean() || n == 0) {
             // Randomly.getBoolean()有50%概率为true
             // 将一条语句的where条件变成和另一条语句一样
@@ -229,6 +250,10 @@ public class TableTool {
         return Randomly.fromList(candidates);
     }
 
+    /**
+     * 初始化外部版本链
+     * @return
+     */
     static HashMap<Integer, ArrayList<Version>> initVersionData() {
         // 首先用表数据初始化外部版本链
         HashMap<Integer, ArrayList<Version>> vData = new HashMap<>();
@@ -247,6 +272,7 @@ public class TableTool {
                         }
                     }
                     ArrayList<Version> versions = new ArrayList<>();
+                    // versions代表一个版本链
                     versions.add(new Version(data, txInit, false));
                     vData.put(rowId, versions);
                 }
@@ -346,12 +372,14 @@ public class TableTool {
         return res;
     }
 
+    // 将troc表的数据转化成内存中的view
     static View tableToView() {
         View view = new View();
         String query = "SELECT * FROM " + TableName;
         TableTool.executeQueryWithCallback(query, rs -> {
             try {
                 while (rs.next()) {
+                    // 一行数据
                     int rowId = 0;
                     Object[] data = new Object[ColCount - 1];
                     int idx = 0;
@@ -371,7 +399,7 @@ public class TableTool {
         });
         return view;
     }
-
+    // 将内存中的view覆盖到troc表
     static void viewToTable(View view) {
         clearTable(TableName);
         ArrayList<String> insertStatements = new ArrayList<>();
@@ -421,29 +449,33 @@ public class TableTool {
     static void clearTable(String tableName) {
         executeOnTable(String.format("DELETE FROM %s", tableName));
     }
-
+    // 从troc表创建快照_troc_snapshotName
     static void takeSnapshotForTable(String snapshotName) {
         String trocTableName = TrocTablePrefix + snapshotName;
         cloneTable(TableName, trocTableName);
-    }
-
+    } 
+    // 从_troc_snapshotName表恢复数据到troc表
     static void recoverTableFromSnapshot(String snapshotName) {
         String trocTableName = TrocTablePrefix + snapshotName;
         cloneTable(trocTableName, TableName);
     }
 
+    // 从troc表创建快照_troc_backup
     static void backupCurTable() {
         takeSnapshotForTable(BackupName);
     }
 
+    // 从_troc_backup表恢复数据到troc表
     static void recoverCurTable() {
         recoverTableFromSnapshot(BackupName);
     }
 
+    //从troc表创建快照_troc_origin
     static void backupOriginalTable() {
         takeSnapshotForTable(OriginalName);
     }
 
+    // 从_troc_origin表恢复数据到troc表
     static void recoverOriginalTable() {
         recoverTableFromSnapshot(OriginalName);
     }
@@ -478,6 +510,7 @@ public class TableTool {
         try {
             statement = conn.createStatement();
             resultSet = statement.executeQuery(query);
+            // handle是callback函数，用于处理查询结果
             handler.handle(resultSet);
             resultSet.close();
             statement.close();
@@ -485,6 +518,24 @@ public class TableTool {
             log.info("Execute query failed: {}", query);
             e.printStackTrace();
         }
+    }
+    public static int executeQueryReturnInteger(String query){
+        Statement statement;
+        ResultSet resultSet;
+        int num = 0;
+        try {
+            statement = conn.createStatement();
+            resultSet = statement.executeQuery(query);
+            if(resultSet.next()){
+                num =((Long) resultSet.getObject(1)).intValue();
+            }
+            resultSet.close();
+            statement.close();
+        } catch (SQLException e) {
+            log.info("Execute query failed: {}", query);
+            e.printStackTrace();
+        }
+        return num;
     }
 
     static ArrayList<Object> getFinalStateAsList() {
@@ -608,6 +659,7 @@ public class TableTool {
         }
     }
 
+    // 将所有rowId补全
     static ArrayList<Integer> fillAllRowId() {
         ArrayList<Integer> filledRowIds = new ArrayList<>();
         while (true){

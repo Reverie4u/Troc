@@ -74,6 +74,7 @@ public class Main {
                 Table table = TableTool.dbms.buildTable(options.getTableName());
                 table.initialize();
                 log.info(table.getCreateTableSql());
+                // 这个地方已经创建好表了，并填充数据了
                 TableTool.preProcessTable();
                 TableTool.bugReport.setCreateTableSQL(table.getCreateTableSql());
                 TableTool.bugReport.setInitializeStatements(table.getInitializeStatements());
@@ -91,7 +92,7 @@ public class Main {
                     tx1 = table.genTransaction(1);
                     tx2 = table.genTransaction(2);
                     // 手动构建冲突
-                    TableTool.makeConflict(tx1, tx2);
+                    TableTool.makeConflict(tx1, tx2, table);
                     TableTool.bugReport.setTx1(tx1);
                     TableTool.bugReport.setTx2(tx2);
                     log.info("Transaction 1:\n{}", tx1);
