@@ -491,10 +491,16 @@ public class TrocChecker {
                 boolean deleted = allView.deleted != null && allView.deleted.containsKey(rowId)
                         && allView.deleted.get(rowId) || stmt.type == StatementType.DELETE;
                 Object[] data;
+                log.info("rowId: {}, deleted: {}", rowId, deleted);
+                log.info("allView:{}", allView);
+                log.info("newView:{}", newView);
                 if (deleted) {
                     data = allView.data.get(rowId);
                 } else {
                     data = newView.data.get(rowId);
+                }
+                if(data == null){
+                    continue;
                 }
                 if (!vData.containsKey(rowId)) {
                     vData.put(rowId, new ArrayList<>());

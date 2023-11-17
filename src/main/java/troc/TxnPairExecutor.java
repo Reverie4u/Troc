@@ -124,6 +124,7 @@ public class TxnPairExecutor {
                 startTs = System.currentTimeMillis();
                 while (queryReturn == null) { // wait for 2s
                     if (System.currentTimeMillis() - startTs > 2000) { // child thread is blocked
+                        // 等待结果超时就认为是阻塞了
                         log.info(txn + "-" + statementCell.statementId + ": time out");
                         txnBlock.put(txn, true); // record blocked transaction
                         StatementCell blockPoint = statementCell.copy();
@@ -136,10 +137,11 @@ public class TxnPairExecutor {
                     }
                     queryReturn = communicationID.poll();
                 }
-                // 成功收到了feedback, 将语句结果放入actualSchedule中
+                // 成功收到了feedback, 将实际执行的语句放入actualSchedule中
                 if (queryReturn != null) { // success to receive feedback
                     if ((statementCell.type == StatementType.COMMIT || statementCell.type == StatementType.ROLLBACK)
                             && txnBlock.get(otherTxn)) {
+                        // 下一条语句的feedback
                         StatementCell nextReturn = communicationID.poll();
                         while (nextReturn == null) {
                             if (System.currentTimeMillis() - startTs > 15000) { // child thread is blocked
@@ -164,6 +166,7 @@ public class TxnPairExecutor {
                             break;
                         }
                     } else if (queryReturn.statement.equals(statementCell.statement)) {
+                        // 收到的反馈就是当前语句
                         statementCell.result = queryReturn.result;
                         actualSchedule.add(statementCell);
                     } else {
