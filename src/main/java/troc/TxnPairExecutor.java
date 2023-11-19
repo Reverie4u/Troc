@@ -45,6 +45,7 @@ public class TxnPairExecutor {
         actualSchedule = new ArrayList<>();
         txnAbort.put(1, false);
         txnAbort.put(2, false);
+        // SynchronousQueue不存储元素，每一次put都会阻塞，直到另一个线程take
         BlockingQueue<StatementCell> queue1 = new SynchronousQueue<>();
         BlockingQueue<StatementCell> queue2 = new SynchronousQueue<>();
         BlockingQueue<StatementCell> communicationID = new SynchronousQueue<>();
@@ -121,6 +122,7 @@ public class TxnPairExecutor {
                 }
                 // 等待语句执行结果
                 StatementCell queryReturn = communicationID.poll(); // communicate with a child thread
+                log.info("queryId: {}, queryReturn: {}", queryID,queryReturn);
                 startTs = System.currentTimeMillis();
                 while (queryReturn == null) { // wait for 2s
                     if (System.currentTimeMillis() - startTs > 2000) { // child thread is blocked
@@ -136,13 +138,16 @@ public class TxnPairExecutor {
                         break;
                     }
                     queryReturn = communicationID.poll();
+                    
                 }
+                log.info("queryId: {}, queryReturn: {}", queryID,queryReturn);
                 // 成功收到了feedback, 将实际执行的语句放入actualSchedule中
                 if (queryReturn != null) { // success to receive feedback
                     if ((statementCell.type == StatementType.COMMIT || statementCell.type == StatementType.ROLLBACK)
                             && txnBlock.get(otherTxn)) {
-                        // 下一条语句的feedback
+                        // 如果当前语句是提交或回滚语句，且另一个事务被阻塞，那么当前语句执行完成后，另一个事务会取消阻塞
                         StatementCell nextReturn = communicationID.poll();
+                        log.info("nextReturn: {}", nextReturn);
                         while (nextReturn == null) {
                             if (System.currentTimeMillis() - startTs > 15000) { // child thread is blocked
                                 log.info(" -- " + txn + "." + statementCell.statementId + ": time out");
@@ -151,11 +156,14 @@ public class TxnPairExecutor {
                             }
                             nextReturn = communicationID.poll();
                         }
+                        log.info("nextReturn: {}", nextReturn);
                         if (nextReturn != null) {
                             if (queryReturn.statement.equals(statementCell.statement)) {
                                 statementCell.result = queryReturn.result;
                                 blockedStmts.get(otherTxn).get(0).result = nextReturn.result;
                             } else {
+                                // 这个分支有可能进入吗？
+                                log.info(" -- Impossible branch(1)");
                                 statementCell.result = nextReturn.result;
                                 blockedStmts.get(otherTxn).get(0).result = queryReturn.result;
                             }
@@ -174,6 +182,7 @@ public class TxnPairExecutor {
                         log.info(" -- DeadLock happened(1)");
                         statementCell.blocked = true;
                         actualSchedule.add(statementCell);
+                        // 直接break跳出out标记的for循环
                         break out;
                     }
 
@@ -193,6 +202,7 @@ public class TxnPairExecutor {
                                 log.info("Interrupted Exception: " + e.getMessage());
                             }
                             StatementCell blockedReturn = communicationID.poll();
+                            log.info("blockedReturn: {}", blockedReturn);
                             startTs = System.currentTimeMillis();
                             while (blockedReturn == null) {
                                 if (System.currentTimeMillis() - startTs > 10000) {
@@ -202,6 +212,7 @@ public class TxnPairExecutor {
                                 }
                                 blockedReturn = communicationID.poll();
                             }
+                            log.info("blockedReturn: {}", blockedReturn);
                             if (blockedReturn != null) {
                                 blockedStmtCell.result = blockedReturn.result;
                                 actualSchedule.add(blockedStmtCell);
@@ -224,6 +235,7 @@ public class TxnPairExecutor {
                     }
                 }
             }
+            // 发生死锁时，跳出for循环
             if (isDeadLock) {
                 try {
                     tx1.conn.createStatement().executeUpdate("ROLLBACK"); // stop transaction
@@ -236,11 +248,24 @@ public class TxnPairExecutor {
             StatementCell stopThread1 = new StatementCell(tx1, schedule.size());
             StatementCell stopThread2 = new StatementCell(tx2, schedule.size());
             try {
-                while (communicationID.poll() != null);
+                // 这里需要确保子线程都已经将结果放入communicationID
+                for(StatementCell s = communicationID.poll(); s != null; s = communicationID.poll()){
+                    log.info("poll from communicationID: {}", s);
+                }
+                // communicationID.take();
             } catch (Exception ignored) {}
             try {
-                queue1.put(stopThread1);
-                queue2.put(stopThread2);
+                // 把线程1和线程2终止
+                // queue1.put(stopThread1); // 通过阻塞队列通知其他线程终止
+                // queue2.put(stopThread2);
+                while(!queue1.offer(stopThread1)){
+                    // 如果添加元素失败, 说明消费者线程阻塞了, 需要疏通一下communicationID
+                    communicationID.take();
+                }
+                while(!queue2.offer(stopThread2)){
+                    // 如果添加元素失败, 说明消费者线程阻塞了, 需要疏通一下communicationID
+                    communicationID.take();
+                }
             } catch (InterruptedException e) {
                 log.info(" -- MainThread stop child thread Interrupted exception: " + e.getMessage());
             }
@@ -273,7 +298,9 @@ public class TxnPairExecutor {
             try {
                 while (true) {
                     StatementCell stmt = queue.take(); // communicate with main thread
-                    if (stmt.statementId >= scheduleCount) break; // stop condition: schedule.size()
+                    if (stmt.statementId >= scheduleCount) {
+                        break; // stop condition: schedule.size()
+                    }
                     // execute a query
                     String query = stmt.statement;
                     try {
@@ -284,6 +311,7 @@ public class TxnPairExecutor {
                             stmt.tx.conn.createStatement().executeUpdate(query);
                         }
                         exceptionMessage = "";
+                        // communicationID.put(stmt); // communicate to main thread
                     } catch (SQLException e) {
                         log.info(" -- TXNThread threadExec exception");
                         log.info("Query {}: {}", stmt, query);
@@ -292,7 +320,9 @@ public class TxnPairExecutor {
                         exceptionMessage = exceptionMessage + "; [Query] " + query;
                     } finally {
                         try {
-                            // communicationID是一个阻塞队列
+                            // communicationID是一个阻塞队列，用于两个消费者与生产者进行通信
+                            // 线程2在这个地方阻塞，导致一直无法结束
+                            log.info("add to communicationID: {}", stmt);
                             communicationID.put(stmt); // communicate to main thread
                         } catch (InterruptedException e) { // communicationID.put()
                             log.info(" -- TXNThread threadExec exception");
