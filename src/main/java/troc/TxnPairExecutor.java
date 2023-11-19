@@ -254,20 +254,17 @@ public class TxnPairExecutor {
                 }
                 // communicationID.take();
             } catch (Exception ignored) {}
-            try {
-                // 把线程1和线程2终止
-                // queue1.put(stopThread1); // 通过阻塞队列通知其他线程终止
-                // queue2.put(stopThread2);
-                while(!queue1.offer(stopThread1)){
-                    // 如果添加元素失败, 说明消费者线程阻塞了, 需要疏通一下communicationID
-                    communicationID.take();
-                }
-                while(!queue2.offer(stopThread2)){
-                    // 如果添加元素失败, 说明消费者线程阻塞了, 需要疏通一下communicationID
-                    communicationID.take();
-                }
-            } catch (InterruptedException e) {
-                log.info(" -- MainThread stop child thread Interrupted exception: " + e.getMessage());
+            // 把线程1和线程2终止
+            // queue1.put(stopThread1); // 通过阻塞队列通知其他线程终止
+            // queue2.put(stopThread2);
+            // 这个地方写的还是有问题。
+            while(!queue1.offer(stopThread1)){
+                // 如果添加元素失败, 说明消费者线程阻塞了, 需要疏通一下communicationID
+                communicationID.poll();
+            }
+            while(!queue2.offer(stopThread2)){
+                // 如果添加元素失败, 说明消费者线程阻塞了, 需要疏通一下communicationID
+                communicationID.poll();
             }
         }
     }
