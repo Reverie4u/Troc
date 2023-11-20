@@ -91,6 +91,7 @@ public class Main {
                     continue;
                 }
                 log.info(table.getCreateTableSql());
+                log.info("InitializeStatements: {}",table.getInitializeStatements());
                 // 这个地方已经创建好表了，并填充数据了
                 TableTool.preProcessTable();
                 TableTool.bugReport.setCreateTableSQL(table.getCreateTableSql());
