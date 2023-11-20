@@ -143,9 +143,11 @@ public class TxnPairExecutor {
                 log.info("queryId: {}, queryReturn: {}", queryID,queryReturn);
                 // 成功收到了feedback, 将实际执行的语句放入actualSchedule中
                 if (queryReturn != null) { // success to receive feedback
+                    log.info("enter 1");
                     if ((statementCell.type == StatementType.COMMIT || statementCell.type == StatementType.ROLLBACK)
                             && txnBlock.get(otherTxn)) {
                         // 如果当前语句是提交或回滚语句，且另一个事务被阻塞，那么当前语句执行完成后，另一个事务会取消阻塞
+                        log.info("enter 1-1");
                         StatementCell nextReturn = communicationID.poll();
                         log.info("nextReturn: {}", nextReturn);
                         while (nextReturn == null) {
@@ -162,7 +164,7 @@ public class TxnPairExecutor {
                                 statementCell.result = queryReturn.result;
                                 blockedStmts.get(otherTxn).get(0).result = nextReturn.result;
                             } else {
-                                // 这个分支有可能进入吗？
+                                // 这个分支有可能进入吗？貌似多线程状态确实可能
                                 log.info(" -- Impossible branch(1)");
                                 statementCell.result = nextReturn.result;
                                 blockedStmts.get(otherTxn).get(0).result = queryReturn.result;
@@ -175,9 +177,11 @@ public class TxnPairExecutor {
                         }
                     } else if (queryReturn.statement.equals(statementCell.statement)) {
                         // 收到的反馈就是当前语句
+                        log.info("enter 1-2");
                         statementCell.result = queryReturn.result;
                         actualSchedule.add(statementCell);
                     } else {
+                        log.info("enter 1-3");
                         isDeadLock = true;
                         log.info(" -- DeadLock happened(1)");
                         statementCell.blocked = true;
@@ -257,7 +261,6 @@ public class TxnPairExecutor {
             // 把线程1和线程2终止
             // queue1.put(stopThread1); // 通过阻塞队列通知其他线程终止
             // queue2.put(stopThread2);
-            // 这个地方写的还是有问题。
             while(!queue1.offer(stopThread1)){
                 // 如果添加元素失败, 说明消费者线程阻塞了, 需要疏通一下communicationID
                 communicationID.poll();

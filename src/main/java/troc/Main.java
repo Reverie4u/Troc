@@ -86,6 +86,10 @@ public class Main {
                 } catch (InterruptedException e) {}
                 Table table = TableTool.dbms.buildTable(options.getTableName());
                 table.initialize();
+                if(table.getInitRowCount() == 0) {
+                    log.info("Table is empty, skip.");
+                    continue;
+                }
                 log.info(table.getCreateTableSql());
                 // 这个地方已经创建好表了，并填充数据了
                 TableTool.preProcessTable();
@@ -102,9 +106,12 @@ public class Main {
                     } catch (InterruptedException e) {}
                     // 恢复原始table
                     TableTool.recoverOriginalTable();
+                    log.info("Current table(1):\n{}",TableTool.tableToView());
                     // 生成两个事务
                     tx1 = table.genTransaction(1);
                     tx2 = table.genTransaction(2);
+                    TableTool.recoverOriginalTable();
+                    log.info("Current table(2):\n{}",TableTool.tableToView());
                     // 手动构建冲突
                     TableTool.makeConflict(tx1, tx2, table);
                     TableTool.bugReport.setTx1(tx1);

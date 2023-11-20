@@ -163,6 +163,8 @@ public class StatementCell {
             rs = statement.executeQuery(query);
             if (!rs.next()) {
                 // 为什么会出现没有结果？
+                // 失败是因为当前表中没有数据
+                log.info(TableTool.tableToView().toString());
                 log.info("Choose row failed, rowId:{}, statement:{}", rowId, this.statement);
                 return;
             }
