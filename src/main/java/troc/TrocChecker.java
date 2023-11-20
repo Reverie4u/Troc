@@ -131,9 +131,11 @@ public class TrocChecker {
         tx1.clearStates();
         tx2.clearStates();
         vData = TableTool.initVersionData();
+        log.info("init mvcc: {}", vData);
         // 初始状态每一行只有一个版本
         boolean hasConflict = false;
         for (StatementCell stmt : schedule) {
+            
             Transaction curTx = stmt.tx;
             Transaction otherTx = curTx == tx1 ? tx2 : tx1;
             if (curTx.blocked) {
@@ -150,13 +152,16 @@ public class TrocChecker {
             } else {
                 oracleOrder.add(stmt);
                 if (stmt.type == StatementType.COMMIT || stmt.type == StatementType.ROLLBACK) {
+                    // 当前事务提交的时候, 把另一个事务的阻塞语句重新分析一遍。
                     otherTx.blocked = false;
                     for (StatementCell blockedStmt : otherTx.blockedStatements) {
                         analyzeStmt(blockedStmt, otherTx, curTx);
                         oracleOrder.add(blockedStmt);
+                        log.info("after blockedStmt: {},  mvcc: {}",blockedStmt, vData);
                     }
                 }
             }
+            log.info("after stmt: {},  mvcc: {}", stmt, vData);
             if (curTx.blocked && otherTx.blocked) {
                 isDeadlock = true;
                 tx1.clearStates();
@@ -186,6 +191,7 @@ public class TrocChecker {
             }
             return false;
         }
+        // 读未提交下，SELECT_SHARE和SELECT_UPDATE直接获取最新的数据, 理论上SELECT也应该直接获取最新数据？
         if (curTx.isolationlevel == IsolationLevel.READ_UNCOMMITTED
             && (stmt.type == StatementType.SELECT_SHARE || stmt.type == StatementType.SELECT_UPDATE)) {
                 stmt.view = newView();
@@ -424,12 +430,13 @@ public class TrocChecker {
         return view;
     }
 
+    // 和newestView逻辑一样
     View newView() {
         View view = new View();
         for (int rowId : vData.keySet()) {
             ArrayList<Version> versions = vData.get(rowId);
             // 这个地方会偶然性地报数组越界
-            if(versions.isEmpty()){
+            if (versions == null || versions.isEmpty()) {
                 continue;
             }
             Version version = versions.get(versions.size()-1);
@@ -471,10 +478,11 @@ public class TrocChecker {
         View curView = buildTxView(curTx, otherTx, false);
         View allView = curView;
         if (curTx.isolationlevel == IsolationLevel.REPEATABLE_READ) {
+            // 对于update语句，只能看到提交后的数据
             allView = buildTxView(curTx, otherTx, true);
         }
-        // 获取影响行数
-        HashSet<Integer> rowIds = getAffectedRows(stmt, allView);
+        // 获取影响行数的时候不能包含已删除的行
+        HashSet<Integer> rowIds = getAffectedRows(stmt, curView); 
         String snapshotName = "update_version";
         TableTool.takeSnapshotForTable(snapshotName);
         TableTool.viewToTable(curView);
@@ -491,9 +499,6 @@ public class TrocChecker {
                 boolean deleted = allView.deleted != null && allView.deleted.containsKey(rowId)
                         && allView.deleted.get(rowId) || stmt.type == StatementType.DELETE;
                 Object[] data;
-                log.info("rowId: {}, deleted: {}", rowId, deleted);
-                log.info("allView:{}", allView);
-                log.info("newView:{}", newView);
                 if (deleted) {
                     data = allView.data.get(rowId);
                 } else {
