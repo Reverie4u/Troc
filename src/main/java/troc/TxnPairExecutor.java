@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 public class TxnPairExecutor {
@@ -88,7 +89,7 @@ public class TxnPairExecutor {
 
         public void run() {
             Map<Integer, Boolean> txnBlock = new HashMap<>(); // whether a child thread is blocked
-            txnBlock.put(1, false); // txn 1 is false
+            txnBlock.put(1, false); 
             txnBlock.put(2, false);
             Map<Integer, ArrayList<StatementCell>> blockedStmts = new HashMap<>(); // record blocked statements
             blockedStmts.put(1, null);
@@ -107,6 +108,7 @@ public class TxnPairExecutor {
                 int otherTxn = (txn == 1) ? 2 : 1;
                 // 如果当前事务被阻塞，则将当前语句放入阻塞队列中
                 if (txnBlock.get(txn)) { // if a child thread is blocked
+                    log.info("txn {} is blocked, add query {} to blockedStmts",txn, statementCell);
                     ArrayList<StatementCell> stmts = blockedStmts.get(txn);
                     stmts.add(statementCell);
                     blockedStmts.put(txn, stmts); // save its statements 这里似乎不太必要   
@@ -115,51 +117,50 @@ public class TxnPairExecutor {
                 try {
                     // 当前事务未被阻塞，将当前语句放入队列中
                     queues.get(txn).put(statementCell);
+                    log.info("add query {} to queue {}",statementCell,txn);
                 } catch (InterruptedException e) {
                     log.info(" -- MainThread run exception");
                     log.info("Query: " + statementCell.statement);
                     log.info("Interrupted Exception: " + e.getMessage());
                 }
                 // 等待语句执行结果
-                StatementCell queryReturn = communicationID.poll(); // communicate with a child thread
-                log.info("queryId: {}, queryReturn: {}", queryID,queryReturn);
-                startTs = System.currentTimeMillis();
-                while (queryReturn == null) { // wait for 2s
-                    if (System.currentTimeMillis() - startTs > 2000) { // child thread is blocked
-                        // 等待结果超时就认为是阻塞了
-                        log.info(txn + "-" + statementCell.statementId + ": time out");
-                        txnBlock.put(txn, true); // record blocked transaction
-                        StatementCell blockPoint = statementCell.copy();
-                        blockPoint.blocked = true;
-                        actualSchedule.add(blockPoint);
-                        ArrayList<StatementCell> stmts = new ArrayList<>();
-                        stmts.add(statementCell);
-                        blockedStmts.put(txn, stmts);
-                        break;
-                    }
-                    queryReturn = communicationID.poll();
-                    
-                }
-                log.info("queryId: {}, queryReturn: {}", queryID,queryReturn);
-                // 成功收到了feedback, 将实际执行的语句放入actualSchedule中
-                if (queryReturn != null) { // success to receive feedback
-                    log.info("enter 1");
+                StatementCell queryReturn=null;
+                try {
+                    queryReturn = communicationID.poll(2000, TimeUnit.MILLISECONDS);
+                } catch (InterruptedException e) {
+                    log.info(" -- MainThread run exception");
+                    log.info("Query: " + statementCell.statement);
+                    log.info("Interrupted Exception: " + e.getMessage());
+                } 
+                log.info("current query: {}, queryReturn: {}", statementCell, queryReturn);
+                if(queryReturn==null){
+                    log.info(txn + "-" + statementCell.statementId + ": time out");
+                    txnBlock.put(txn, true); // record blocked transaction
+                    StatementCell blockPoint = statementCell.copy();
+                    blockPoint.blocked = true;
+                    actualSchedule.add(blockPoint);
+                    ArrayList<StatementCell> stmts = new ArrayList<>();
+                    stmts.add(statementCell);
+                    blockedStmts.put(txn, stmts);
+                }else{
                     if ((statementCell.type == StatementType.COMMIT || statementCell.type == StatementType.ROLLBACK)
                             && txnBlock.get(otherTxn)) {
                         // 如果当前语句是提交或回滚语句，且另一个事务被阻塞，那么当前语句执行完成后，另一个事务会取消阻塞
-                        log.info("enter 1-1");
-                        StatementCell nextReturn = communicationID.poll();
-                        log.info("nextReturn: {}", nextReturn);
-                        while (nextReturn == null) {
-                            if (System.currentTimeMillis() - startTs > 15000) { // child thread is blocked
-                                log.info(" -- " + txn + "." + statementCell.statementId + ": time out");
-                                timeout = true;
-                                break;
-                            }
-                            nextReturn = communicationID.poll();
-                        }
-                        log.info("nextReturn: {}", nextReturn);
-                        if (nextReturn != null) {
+                        StatementCell nextReturn=null;
+                        try {
+                            nextReturn = communicationID.poll(2000, TimeUnit.MILLISECONDS);
+                        } catch (InterruptedException e) {
+                            log.info(" -- MainThread run exception");
+                            log.info("Query: " + statementCell.statement);
+                            log.info("Interrupted Exception: " + e.getMessage());
+                        };
+                        log.info("current query: {}, nextReturn: {}", statementCell, nextReturn);
+                        if(nextReturn==null){
+                            log.info(" -- " + txn + "." + statementCell.statementId + ": time out");
+                            timeout = true;
+                            log.info(" -- next return failed: " + statementCell.statement);
+                            break;
+                        } else{
                             if (queryReturn.statement.equals(statementCell.statement)) {
                                 statementCell.result = queryReturn.result;
                                 blockedStmts.get(otherTxn).get(0).result = nextReturn.result;
@@ -171,17 +172,13 @@ public class TxnPairExecutor {
                             }
                             actualSchedule.add(statementCell);
                             actualSchedule.add(blockedStmts.get(otherTxn).get(0));
-                        } else {
-                            log.info(" -- next return failed: " + statementCell.statement);
-                            break;
                         }
                     } else if (queryReturn.statement.equals(statementCell.statement)) {
                         // 收到的反馈就是当前语句
-                        log.info("enter 1-2");
                         statementCell.result = queryReturn.result;
                         actualSchedule.add(statementCell);
                     } else {
-                        log.info("enter 1-3");
+                        // 如果收到的结果不是当前语句的结果，且本事务也没提交，那就说明出现了阻塞。
                         isDeadLock = true;
                         log.info(" -- DeadLock happened(1)");
                         statementCell.blocked = true;
@@ -189,45 +186,47 @@ public class TxnPairExecutor {
                         // 直接break跳出out标记的for循环
                         break out;
                     }
-
                 }
                 if ((statementCell.type == StatementType.COMMIT
                         || statementCell.type == StatementType.ROLLBACK) && !exceptionMessage.contains("Deadlock") && !exceptionMessage.contains("lock=true")
                         && !(txnBlock.get(1) && txnBlock.get(2))) {
+                    // 将另一个事务的阻塞状态取消
                     txnBlock.put(otherTxn, false);
                     if (blockedStmts.get(otherTxn) != null) {
                         for (int j = 1; j < blockedStmts.get(otherTxn).size(); j++) {
                             StatementCell blockedStmtCell = blockedStmts.get(otherTxn).get(j);
                             try {
+                                // 将另一个事务的阻塞语句放入队列中
                                 queues.get(otherTxn).put(blockedStmtCell);
                             } catch (InterruptedException e) {
                                 log.info(" -- MainThread blocked exception");
                                 log.info("Query: " + statementCell.statement);
                                 log.info("Interrupted Exception: " + e.getMessage());
                             }
-                            StatementCell blockedReturn = communicationID.poll();
-                            log.info("blockedReturn: {}", blockedReturn);
-                            startTs = System.currentTimeMillis();
-                            while (blockedReturn == null) {
-                                if (System.currentTimeMillis() - startTs > 10000) {
-                                    log.info(" -- " + txn + "." + statementCell.statementId + ": still time out");
-                                    timeout = true;
-                                    break;
-                                }
-                                blockedReturn = communicationID.poll();
+                            StatementCell blockedReturn = null;
+                            try {
+                                blockedReturn = communicationID.poll(2000, TimeUnit.MILLISECONDS);
+                            } catch (InterruptedException e) {
+                                log.info(" -- MainThread blocked exception");
+                                log.info("Query: " + statementCell.statement);
+                                log.info("Interrupted Exception: " + e.getMessage());
                             }
-                            log.info("blockedReturn: {}", blockedReturn);
-                            if (blockedReturn != null) {
+                            log.info("current query: {}, blockedReturn: {}", statementCell, blockedReturn);
+                            if(blockedReturn==null){
+                                log.info(" -- " + txn + "." + statementCell.statementId + ": still time out");
+                                timeout = true;
+                            }else{
                                 blockedStmtCell.result = blockedReturn.result;
                                 actualSchedule.add(blockedStmtCell);
-
                             }
                         }
                     }
                 }
+                // 出现异常/死锁/超时
                 if (exceptionMessage.length() > 0 || (txnBlock.get(1) && txnBlock.get(2)) || timeout) {
                     if (exceptionMessage.contains("Deadlock") || exceptionMessage.contains("lock=true")
                             || (txnBlock.get(1) && txnBlock.get(2))) { // deadlock
+                        log.info("exceptionMessage: {}", exceptionMessage);
                         log.info(" -- DeadLock happened(2)");
                         isDeadLock = true;
                         break;
@@ -322,7 +321,7 @@ public class TxnPairExecutor {
                         try {
                             // communicationID是一个阻塞队列，用于两个消费者与生产者进行通信
                             // 线程2在这个地方阻塞，导致一直无法结束
-                            log.info("add to communicationID: {}", stmt);
+                            log.info("add result of {} to communicationID", stmt);
                             communicationID.put(stmt); // communicate to main thread
                         } catch (InterruptedException e) { // communicationID.put()
                             log.info(" -- TXNThread threadExec exception");
