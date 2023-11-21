@@ -6,7 +6,6 @@ import java.sql.SQLException;
 import java.util.*;
 import java.util.stream.Collectors;
 
-
 @Slf4j
 public class TrocChecker {
 
@@ -52,11 +51,12 @@ public class TrocChecker {
         for (ArrayList<StatementCell> submittedOrder : submittedOrderList) {
             try {
                 Thread.sleep(1000);
-            } catch (InterruptedException e) {}
+            } catch (InterruptedException e) {
+            }
             // check每一种提交顺序
             oracleCheck(submittedOrder);
-            log.info("txPair:{}, conflictTxPair:{}, allCase:{}, conflictCase:{}", 
-                        TableTool.txPair, TableTool.conflictTxPair, TableTool.allCase, TableTool.conflictCase);
+            log.info("txPair:{}, conflictTxPair:{}, allCase:{}, conflictCase:{}",
+                    TableTool.txPair, TableTool.conflictTxPair, TableTool.allCase, TableTool.conflictCase);
         }
     }
 
@@ -76,7 +76,8 @@ public class TrocChecker {
         // 1.正常执行的结果
         TxnPairExecutor executor = new TxnPairExecutor(scheduleClone(schedule), tx1, tx2);
         TxnPairResult execResult = executor.getResult();
-        // ArrayList<StatementCell> mvccSchedule = inferOracleOrderMVCC(scheduleClone(schedule));
+        // ArrayList<StatementCell> mvccSchedule =
+        // inferOracleOrderMVCC(scheduleClone(schedule));
         // TxnPairResult mvccResult = obtainOracleResults(mvccSchedule);
         // 2.通过外部MVCC获取的结果
         TxnPairResult mvccResult = inferOracleMVCC(scheduleClone(schedule));
@@ -135,7 +136,7 @@ public class TrocChecker {
         // 初始状态每一行只有一个版本
         boolean hasConflict = false;
         for (StatementCell stmt : schedule) {
-            
+
             Transaction curTx = stmt.tx;
             Transaction otherTx = curTx == tx1 ? tx2 : tx1;
             if (curTx.blocked) {
@@ -157,7 +158,7 @@ public class TrocChecker {
                     for (StatementCell blockedStmt : otherTx.blockedStatements) {
                         analyzeStmt(blockedStmt, otherTx, curTx);
                         oracleOrder.add(blockedStmt);
-                        log.info("after blockedStmt: {},  mvcc: {}",blockedStmt, vData);
+                        log.info("after blockedStmt: {},  mvcc: {}", blockedStmt, vData);
                     }
                 }
             }
@@ -169,7 +170,7 @@ public class TrocChecker {
                 break;
             }
         }
-        if(hasConflict){
+        if (hasConflict) {
             TableTool.txPairHasConflict = true;
             TableTool.conflictCase++;
         }
@@ -193,8 +194,8 @@ public class TrocChecker {
         }
         // 读未提交下，SELECT_SHARE和SELECT_UPDATE直接获取最新的数据, 理论上SELECT也应该直接获取最新数据？
         if (curTx.isolationlevel == IsolationLevel.READ_UNCOMMITTED
-            && (stmt.type == StatementType.SELECT_SHARE || stmt.type == StatementType.SELECT_UPDATE)) {
-                stmt.view = newView();
+                && (stmt.type == StatementType.SELECT_SHARE || stmt.type == StatementType.SELECT_UPDATE)) {
+            stmt.view = newView();
         } else {
             stmt.view = buildTxView(curTx, otherTx, false);
         }
@@ -439,7 +440,7 @@ public class TrocChecker {
             if (versions == null || versions.isEmpty()) {
                 continue;
             }
-            Version version = versions.get(versions.size()-1);
+            Version version = versions.get(versions.size() - 1);
             if (!version.deleted) {
                 view.data.put(rowId, version.data);
             }
@@ -482,7 +483,7 @@ public class TrocChecker {
             allView = buildTxView(curTx, otherTx, true);
         }
         // 获取影响行数的时候不能包含已删除的行
-        HashSet<Integer> rowIds = getAffectedRows(stmt, curView); 
+        HashSet<Integer> rowIds = getAffectedRows(stmt, curView);
         String snapshotName = "update_version";
         TableTool.takeSnapshotForTable(snapshotName);
         TableTool.viewToTable(curView);
@@ -504,7 +505,7 @@ public class TrocChecker {
                 } else {
                     data = newView.data.get(rowId);
                 }
-                if(data == null){
+                if (data == null) {
                     continue;
                 }
                 if (!vData.containsKey(rowId)) {
@@ -559,7 +560,6 @@ public class TrocChecker {
         return res;
     }
 
-
     ArrayList<Object> queryOnView(StatementCell stmt, View view) {
         TableTool.backupCurTable();
         TableTool.viewToTable(view);
@@ -582,7 +582,8 @@ public class TrocChecker {
         for (int i = 0; i < minLen; i++) {
             StatementCell oStmt = oracleOrder.get(i);
             StatementCell eStmt = execOrder.get(i);
-            if (oStmt.aborted && eStmt.aborted) continue;
+            if (oStmt.aborted && eStmt.aborted)
+                continue;
             if (oStmt.aborted) {
                 log.info("Error: Missing abort");
                 bugInfo += " -- Error: Missing abort";
@@ -641,6 +642,7 @@ public class TrocChecker {
     private boolean shouldNotBlock(StatementCell stmt) {
         return false;
     }
+
     private boolean shouldNotAbort(StatementCell stmt) {
         return false;
     }

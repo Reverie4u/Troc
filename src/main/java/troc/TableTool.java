@@ -56,8 +56,10 @@ public class TableTool {
             possibleIsolationLevels.add(IsolationLevel.SERIALIZABLE);
         }
     }
+
     /**
      * 创建JDBC连接
+     * 
      * @param options
      * @return
      */
@@ -85,12 +87,13 @@ public class TableTool {
         String sql;
         do {
             sql = input.nextLine();
-            if (sql.equals("")) break;
+            if (sql.equals(""))
+                break;
             TableTool.executeOnTable(sql);
         } while (true);
     }
 
-    /** 
+    /**
      * 从输入流中读取事务
      */
     static Transaction readTransactionFromScanner(Scanner input, int txId) {
@@ -101,9 +104,11 @@ public class TableTool {
         String sql;
         int cnt = 0;
         do {
-            if (!input.hasNext()) break;
+            if (!input.hasNext())
+                break;
             sql = input.nextLine();
-            if (sql.equals("") || sql.equals("END")) break;
+            if (sql.equals("") || sql.equals("END"))
+                break;
             tx.statements.add(new StatementCell(tx, cnt++, sql));
         } while (true);
         return tx;
@@ -111,15 +116,19 @@ public class TableTool {
 
     /**
      * 从输入流中读取提交顺序
+     * 
      * @param input
      * @return
      */
     static String readScheduleFromScanner(Scanner input) {
         do {
-            if (!input.hasNext()) break;
+            if (!input.hasNext())
+                break;
             String scheduleStr = input.nextLine();
-            if (scheduleStr.equals("")) continue;
-            if (scheduleStr.equals("END")) break;
+            if (scheduleStr.equals(""))
+                continue;
+            if (scheduleStr.equals("END"))
+                break;
             return scheduleStr;
         } while (true);
         return "";
@@ -215,17 +224,21 @@ public class TableTool {
             throw new RuntimeException("Fetch metadata of table failed:", e);
         }
     }
+
     /**
      * 制造冲突，让两个事务尝试修改同一行数据
+     * 
      * @param tx1
      * @param tx2
      */
     static void makeConflict(Transaction tx1, Transaction tx2, Table table) {
         StatementCell stmt1 = randomStmtWithCondition(tx1);
         StatementCell stmt2 = randomStmtWithCondition(tx2);
-        // n有问题
-        // int n = getNewRowId(); // 当前表的最大rowId+1
-        int n = table.getInitRowCount()+1;
+        if (!(stmt1 != null && stmt2 != null)) {
+            log.info("make conflict failed: stmt1: {}, stmt2: {}", stmt1, stmt2);
+            return;
+        }
+        int n = table.getInitRowCount() + 1;
         if (Randomly.getBoolean() || n == 0) {
             // Randomly.getBoolean()有50%概率为true
             // 将一条语句的where条件变成和另一条语句一样
@@ -237,7 +250,8 @@ public class TableTool {
             try {
                 stmt1.makeChooseRow(rowId);
                 stmt2.makeChooseRow(rowId);
-            } catch (Exception e) {}
+            } catch (Exception e) {
+            }
         }
     }
 
@@ -250,11 +264,15 @@ public class TableTool {
                 candidates.add(stmt);
             }
         }
+        if (candidates.isEmpty()) {
+            return null;
+        }
         return Randomly.fromList(candidates);
     }
 
     /**
      * 初始化外部版本链
+     * 
      * @return
      */
     static HashMap<Integer, ArrayList<Version>> initVersionData() {
@@ -303,7 +321,8 @@ public class TableTool {
                 || stmt.type == StatementType.INSERT) {
             lock.type = LockType.EXCLUSIVE;
         }
-        if (lock.type == LockType.NONE && stmt.type != StatementType.SELECT) return lock;
+        if (lock.type == LockType.NONE && stmt.type != StatementType.SELECT)
+            return lock;
         lock.lockObject = getLockObjectFromStmtView(stmt);
         return lock;
     }
@@ -318,6 +337,7 @@ public class TableTool {
     }
 
     static LockObject getLockObject(StatementCell stmt) {
+        // 获取锁
         LockObject lockObject = new LockObject();
         HashSet<Integer> lockedRowIds = new HashSet<>();
         HashSet<String> lockedKeys = new HashSet<>();
@@ -326,7 +346,8 @@ public class TableTool {
         } else {
             HashSet<String> indexObjs = new HashSet<>();
             String query = "SELECT * FROM " + TableName + " WHERE " + stmt.whereClause;
-            executeQueryWithCallback(query, rs ->{
+            log.info("getlockObject: {}", query);
+            executeQueryWithCallback(query, rs -> {
                 try {
                     while (rs.next()) {
                         lockedRowIds.add(rs.getInt(RowIdColName));
@@ -360,8 +381,7 @@ public class TableTool {
 
     static HashSet<String> getIndexObjs(HashMap<String, String> values) {
         HashSet<String> res = new HashSet<>();
-        outer:
-        for (String indexName : indexes.keySet()) {
+        outer: for (String indexName : indexes.keySet()) {
             Index index = indexes.get(indexName);
             StringBuilder sb = new StringBuilder(indexName).append(":");
             for (String colName : index.indexedCols) {
@@ -402,6 +422,7 @@ public class TableTool {
         });
         return view;
     }
+
     // 将内存中的view覆盖到troc表
     static void viewToTable(View view) {
         clearTable(TableName);
@@ -423,7 +444,8 @@ public class TableTool {
     }
 
     static String getValueString(Object val, String type) {
-        if (val == null) return "NULL";
+        if (val == null)
+            return "NULL";
         switch (type.toUpperCase()) {
             case "INTEGER":
             case "INT4":
@@ -437,7 +459,8 @@ public class TableTool {
                 return Double.toString((double) val);
             case "BLOB":
                 byte[] bytes = (byte[]) val;
-                if (bytes.length == 0) return "NULL";
+                if (bytes.length == 0)
+                    return "NULL";
                 return byteArrToHexStr(bytes);
             case "CHAR":
             case "VARCHAR":
@@ -452,11 +475,13 @@ public class TableTool {
     static void clearTable(String tableName) {
         executeOnTable(String.format("DELETE FROM %s", tableName));
     }
+
     // 从troc表创建快照_troc_snapshotName
     static void takeSnapshotForTable(String snapshotName) {
         String trocTableName = TrocTablePrefix + snapshotName;
         cloneTable(TableName, trocTableName);
-    } 
+    }
+
     // 从_troc_snapshotName表恢复数据到troc表
     static void recoverTableFromSnapshot(String snapshotName) {
         String trocTableName = TrocTablePrefix + snapshotName;
@@ -473,7 +498,7 @@ public class TableTool {
         recoverTableFromSnapshot(BackupName);
     }
 
-    //从troc表创建快照_troc_origin
+    // 从troc表创建快照_troc_origin
     static void backupOriginalTable() {
         takeSnapshotForTable(OriginalName);
     }
@@ -494,8 +519,8 @@ public class TableTool {
             String createSQL = rs.getString("Create Table");
             rs.close();
             statement.close();
-            createSQL = createSQL.replace("\n", "").
-                    replace("CREATE TABLE `" + tableName + "`", "CREATE TABLE `" + newTableName + "`");
+            createSQL = createSQL.replace("\n", "").replace("CREATE TABLE `" + tableName + "`",
+                    "CREATE TABLE `" + newTableName + "`");
             statement = conn.createStatement();
             statement.execute(createSQL);
             statement.close();
@@ -522,15 +547,16 @@ public class TableTool {
             e.printStackTrace();
         }
     }
-    public static int executeQueryReturnInteger(String query){
+
+    public static int executeQueryReturnInteger(String query) {
         Statement statement;
         ResultSet resultSet;
         int num = 0;
         try {
             statement = conn.createStatement();
             resultSet = statement.executeQuery(query);
-            if(resultSet.next()){
-                num =((Long) resultSet.getObject(1)).intValue();
+            if (resultSet.next()) {
+                num = ((Long) resultSet.getObject(1)).intValue();
             }
             resultSet.close();
             statement.close();
@@ -665,9 +691,10 @@ public class TableTool {
     // 将所有rowId补全
     static ArrayList<Integer> fillAllRowId() {
         ArrayList<Integer> filledRowIds = new ArrayList<>();
-        while (true){
+        while (true) {
             int rowId = fillOneRowId();
-            if (rowId < 0) break;
+            if (rowId < 0)
+                break;
             filledRowIds.add(rowId);
         }
         return filledRowIds;
@@ -707,7 +734,7 @@ public class TableTool {
             try {
                 while (rs.next()) {
                     String tableName = rs.getString(1);
-                    if(tableName.startsWith(TrocTablePrefix)) {
+                    if (tableName.startsWith(TrocTablePrefix)) {
                         executeOnTable("DROP TABLE " + tableName);
                     }
                 }
