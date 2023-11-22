@@ -20,7 +20,7 @@ public class Index {
     }
 
     public Index(String name, ArrayList<String> indexedCols,
-                 boolean isPrimary, boolean isUnique) {
+            boolean isPrimary, boolean isUnique) {
         this(name, isPrimary, isUnique);
         this.indexedCols = indexedCols;
     }

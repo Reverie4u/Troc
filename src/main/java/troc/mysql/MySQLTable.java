@@ -1,11 +1,13 @@
 package troc.mysql;
 
-import troc.*;
-import troc.common.Table;
-
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+
+import troc.DBMS;
+import troc.Randomly;
+import troc.TableTool;
+import troc.common.Table;
 
 public class MySQLTable extends Table {
 

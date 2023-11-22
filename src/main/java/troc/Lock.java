@@ -1,8 +1,8 @@
 package troc;
 
-import lombok.Data;
-
 import java.util.HashSet;
+
+import lombok.Data;
 
 enum LockType {
     SHARE, EXCLUSIVE, NONE
@@ -21,8 +21,10 @@ public class Lock {
     LockObject lockObject;
 
     boolean isConflict(Transaction otherTx) {
-        if (type == LockType.NONE) return false;
-        if (otherTx.finished || otherTx.committed || otherTx.aborted) return false;
+        if (type == LockType.NONE)
+            return false;
+        if (otherTx.finished || otherTx.committed || otherTx.aborted)
+            return false;
         for (Lock otherLock : otherTx.locks) {
             if ((this.type == LockType.EXCLUSIVE || otherLock.type == LockType.EXCLUSIVE)) {
                 if (setIntersect(this.lockObject.rowIds, otherLock.lockObject.rowIds)
@@ -43,15 +45,17 @@ public class Lock {
     private boolean useRangeLock(StatementCell stmt) {
         if (TableTool.dbms == DBMS.MYSQL || TableTool.dbms == DBMS.MARIADB)
             return stmt.tx.isolationlevel == IsolationLevel.REPEATABLE_READ
-                || stmt.tx.isolationlevel == IsolationLevel.SERIALIZABLE;
+                    || stmt.tx.isolationlevel == IsolationLevel.SERIALIZABLE;
         return false;
     }
 
     private boolean isRangeConflict(StatementCell stmt, StatementCell affectedStmt) {
         if ((stmt.type == StatementType.INSERT || stmt.type == StatementType.UPDATE
-                || stmt.type == StatementType.DELETE) && (affectedStmt.type == StatementType.SELECT ||
-                affectedStmt.type == StatementType.SELECT_SHARE || affectedStmt.type == StatementType.SELECT_UPDATE
-                || affectedStmt.type == StatementType.UPDATE || affectedStmt.type == StatementType.DELETE)) {
+                || stmt.type == StatementType.DELETE)
+                && (affectedStmt.type == StatementType.SELECT ||
+                        affectedStmt.type == StatementType.SELECT_SHARE
+                        || affectedStmt.type == StatementType.SELECT_UPDATE
+                        || affectedStmt.type == StatementType.UPDATE || affectedStmt.type == StatementType.DELETE)) {
             String snapshotName = "range_conflict";
             TableTool.takeSnapshotForTable(snapshotName);
             TableTool.viewToTable(affectedStmt.view);
@@ -66,7 +70,8 @@ public class Lock {
     }
 
     static private <T> boolean setDiffer(HashSet<T> setA, HashSet<T> setB) {
-        if (setA.size() != setB.size()) return true;
+        if (setA.size() != setB.size())
+            return true;
         for (T elem : setA) {
             if (!setB.contains(elem)) {
                 return true;

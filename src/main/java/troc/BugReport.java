@@ -1,8 +1,8 @@
 package troc;
 
-import lombok.Data;
-
 import java.util.List;
+
+import lombok.Data;
 
 @Data
 public class BugReport {
@@ -16,7 +16,6 @@ public class BugReport {
     private String submittedOrder;
     private TxnPairResult execRes;
     private TxnPairResult inferredRes;
-
 
     public String toString() {
         StringBuilder sb = new StringBuilder("=============================");

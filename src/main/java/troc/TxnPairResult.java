@@ -7,7 +7,8 @@ public class TxnPairResult {
     private ArrayList<Object> finalState;
     private boolean isDeadBlock;
 
-    public TxnPairResult() { }
+    public TxnPairResult() {
+    }
 
     public TxnPairResult(ArrayList<StatementCell> order, ArrayList<Object> finalState, boolean isDeadBlock) {
         this.order = order;

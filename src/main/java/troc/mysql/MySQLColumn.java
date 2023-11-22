@@ -1,16 +1,17 @@
 package troc.mysql;
 
+import lombok.Getter;
+import lombok.Setter;
 import troc.Randomly;
 import troc.TableTool;
 import troc.common.Column;
-import lombok.Getter;
-import lombok.Setter;
 
 @Getter
 @Setter
 public class MySQLColumn extends Column {
 
-    public MySQLColumn(MySQLTable table, String columnName, MySQLDataType dataType, boolean primaryKey, boolean unique, boolean notNull, int size) {
+    public MySQLColumn(MySQLTable table, String columnName, MySQLDataType dataType, boolean primaryKey, boolean unique,
+            boolean notNull, int size) {
         super(table, columnName, dataType, primaryKey, unique, notNull, size);
     }
 
@@ -36,7 +37,8 @@ public class MySQLColumn extends Column {
             case TEXT:
             case MEDIUMTEXT:
             case LONGTEXT:
-                if (size == 0) size = 20;
+                if (size == 0)
+                    size = 20;
                 String str = TableTool.rand.getString();
                 if (str.length() > size) {
                     str = str.substring(0, size);

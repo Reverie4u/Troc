@@ -1,12 +1,12 @@
 package troc.mysql;
 
-import troc.Randomly;
-import troc.TableTool;
-import troc.common.ExprGen;
-
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
+
+import troc.Randomly;
+import troc.TableTool;
+import troc.common.ExprGen;
 
 public class MySQLExprGen extends ExprGen {
 
@@ -56,7 +56,7 @@ public class MySQLExprGen extends ExprGen {
             case "INT":
                 return Long.toString(TableTool.rand.getInteger());
             case "NULL":
-                return Randomly.getBoolean()? "NULL" : Long.toString(TableTool.rand.getInteger());
+                return Randomly.getBoolean() ? "NULL" : Long.toString(TableTool.rand.getInteger());
             case "STRING":
                 return "\"" + TableTool.rand.getString() + "\"";
             case "DOUBLE":
@@ -67,32 +67,32 @@ public class MySQLExprGen extends ExprGen {
 
     public String genUaryPrefixOp(int depth) {
         String op = Randomly.fromOptions("NOT", "!", "+", "-");
-        return op + "(" + genExpr(depth+1) + ")";
+        return op + "(" + genExpr(depth + 1) + ")";
     }
 
     public String genUaryPostfixOp(int depth) {
         String op = Randomly.fromOptions("IS NULL", "IS FALSE", "IS TRUE");
-        return "(" + genExpr(depth+1) + ")" + op;
+        return "(" + genExpr(depth + 1) + ")" + op;
     }
 
     public String genBinaryLogicalOp(int depth) {
         String op = Randomly.fromOptions("AND", "OR", "XOR");
-        return "(" + genExpr(depth+1) + ") " + op + " (" + genExpr(depth+1) + ")";
+        return "(" + genExpr(depth + 1) + ") " + op + " (" + genExpr(depth + 1) + ")";
     }
 
     public String genBinaryBitOp(int depth) {
         String op = Randomly.fromOptions("&", "|", "^", ">>", "<<");
-        return "(" + genExpr(depth+1) + ") " + op + " (" + genExpr(depth+1) + ")";
+        return "(" + genExpr(depth + 1) + ") " + op + " (" + genExpr(depth + 1) + ")";
     }
 
     public String genBinaryMathOp(int depth) {
         String op = Randomly.fromOptions("+", "-", "*", "/", "%");
-        return "(" + genExpr(depth+1) + ") " + op + " (" + genExpr(depth+1) + ")";
+        return "(" + genExpr(depth + 1) + ") " + op + " (" + genExpr(depth + 1) + ")";
     }
 
     public String genBinaryCompOp(int depth) {
         String op = Randomly.fromOptions("=", "!=", "<", "<=", ">", ">=", "LIKE");
-        return "(" + genExpr(depth+1) + ") " + op + " (" + genExpr(depth+1) + ")";
+        return "(" + genExpr(depth + 1) + ") " + op + " (" + genExpr(depth + 1) + ")";
     }
 
     public String genInOp(int depth) {
@@ -101,13 +101,13 @@ public class MySQLExprGen extends ExprGen {
         for (int i = 0; i < Randomly.baseInt() + 1; i++) {
             exprList.add(genExpr(depth + 1));
         }
-        return "(" + genExpr(depth+1) + ") IN ((" + String.join("), (", exprList) + "))";
+        return "(" + genExpr(depth + 1) + ") IN ((" + String.join("), (", exprList) + "))";
     }
 
     public String genBetweenOp(int depth) {
-        String fromExpr = genExpr(depth+1);
-        String toExpr = genExpr(depth+1);
-        return "(" + genExpr(depth+1) + ") BETWEEN (" + fromExpr + ") AND (" + toExpr + ")";
+        String fromExpr = genExpr(depth + 1);
+        String toExpr = genExpr(depth + 1);
+        return "(" + genExpr(depth + 1) + ") BETWEEN (" + fromExpr + ") AND (" + toExpr + ")";
     }
 
     public String genCastOp(int depth) {
@@ -120,7 +120,7 @@ public class MySQLExprGen extends ExprGen {
         MySQLFunction function = MySQLFunction.getRandomFunc();
         ArrayList<String> argList = new ArrayList<>();
         for (int i = 0; i < function.getArgCnt(); i++) {
-            argList.add(genExpr(depth+1));
+            argList.add(genExpr(depth + 1));
         }
         return function.name() + "((" + String.join("), (", argList) + "))";
     }

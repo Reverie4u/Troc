@@ -1,12 +1,17 @@
 package troc.common;
 
-import lombok.extern.slf4j.Slf4j;
-import troc.*;
-
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+
+import lombok.extern.slf4j.Slf4j;
+import troc.DBMS;
+import troc.IsolationLevel;
+import troc.Randomly;
+import troc.SQLConnection;
+import troc.StatementCell;
+import troc.TableTool;
+import troc.Transaction;
 
 @Slf4j
 public abstract class Table {
@@ -30,6 +35,7 @@ public abstract class Table {
         columnNames = new ArrayList<>();
         columns = new HashMap<>();
     }
+
     public int getInitRowCount() {
         return initRowCount;
     }
@@ -107,7 +113,7 @@ public abstract class Table {
 
     public String genInsertStatement() {
         List<String> insertedCols = Randomly.nonEmptySubset(columnNames);
-        for(String colName : columns.keySet()) {
+        for (String colName : columns.keySet()) {
             Column column = columns.get(colName);
             if ((column.isPrimaryKey() || column.isNotNull()) && !insertedCols.contains(colName)) {
                 insertedCols.add(colName);
@@ -145,11 +151,11 @@ public abstract class Table {
     public String genAddIndexStatement() {
         List<String> candidateColumns = Randomly.nonEmptySubset(columnNames);
         List<String> indexedColumns = new ArrayList<>();
-        for (String colName: candidateColumns) {
+        for (String colName : candidateColumns) {
             Column column = columns.get(colName);
             if (column.getDataType().isNumeric()) {
                 indexedColumns.add(colName);
-            } else if (column.getDataType().isString()){
+            } else if (column.getDataType().isString()) {
                 if (TableTool.dbms == DBMS.MYSQL || TableTool.dbms == DBMS.MARIADB || TableTool.dbms == DBMS.TIDB) {
                     indexedColumns.add(colName + "(5)");
                 } else {
@@ -192,13 +198,15 @@ public abstract class Table {
         if (Randomly.getBoolean()) {
             lastStmt = "ROLLBACK";
         }
-        cell = new StatementCell(tx, n+1, lastStmt);
+        cell = new StatementCell(tx, n + 1, lastStmt);
         statementList.add(cell);
         tx.setStatements(statementList);
         return tx;
     }
+
     /**
      * 生成随机的SQL语句
+     * 
      * @return
      */
     public String genStatement() {

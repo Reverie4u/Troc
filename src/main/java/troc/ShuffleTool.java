@@ -11,10 +11,11 @@ public class ShuffleTool {
         shuffle(res, new ArrayList<>(), tx1.statements, n1, 0, tx2.statements, n2, 0);
         return res;
     }
+
     // 枚举生成所有可能的提交顺序
     public static void shuffle(ArrayList<ArrayList<StatementCell>> res, ArrayList<StatementCell> cur,
-                         ArrayList<StatementCell> txn1, int txn1Len, int txn1Idx, ArrayList<StatementCell> txn2,
-                         int txn2Len, int txn2Idx) {
+            ArrayList<StatementCell> txn1, int txn1Len, int txn1Idx, ArrayList<StatementCell> txn2,
+            int txn2Len, int txn2Idx) {
         if (txn1Idx == txn1Len && txn2Idx == txn2Len) {
             res.add(new ArrayList<>(cur));
             return;
@@ -31,7 +32,8 @@ public class ShuffleTool {
         }
     }
 
-    public static ArrayList<ArrayList<StatementCell>> sampleSubmittedTrace(Transaction tx1, Transaction tx2, int count) {
+    public static ArrayList<ArrayList<StatementCell>> sampleSubmittedTrace(Transaction tx1, Transaction tx2,
+            int count) {
         // 蓄水池抽样算法，从所有可能的提交顺序中选择count个
         ArrayList<ArrayList<StatementCell>> allSubmittedTrace = genAllSubmittedTrace(tx1, tx2);
         int n = allSubmittedTrace.size();
@@ -42,8 +44,8 @@ public class ShuffleTool {
         for (int i = 0; i < count; i++) {
             res.add(allSubmittedTrace.get(i));
         }
-        for(int i = count; i < n; i++) {
-            int d = new Random().nextInt(i+1);
+        for (int i = count; i < n; i++) {
+            int d = new Random().nextInt(i + 1);
             if (d < count) {
                 res.set(d, allSubmittedTrace.get(i));
             }
@@ -51,9 +53,10 @@ public class ShuffleTool {
         return res;
     }
 
-    public static ArrayList<ArrayList<StatementCell>> genRandomSubmittedTrace(Transaction tx1, Transaction tx2, int count) {
+    public static ArrayList<ArrayList<StatementCell>> genRandomSubmittedTrace(Transaction tx1, Transaction tx2,
+            int count) {
         int tx1Len = tx1.statements.size(), tx2Len = tx2.statements.size();
-        if (C(tx1Len+tx2Len, tx1Len) <= count * 1.3) {
+        if (C(tx1Len + tx2Len, tx1Len) <= count * 1.3) {
             return genAllSubmittedTrace(tx1, tx2);
         }
         ArrayList<ArrayList<StatementCell>> res = new ArrayList<>(count);

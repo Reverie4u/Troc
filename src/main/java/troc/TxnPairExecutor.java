@@ -1,7 +1,5 @@
 package troc;
 
-import lombok.extern.slf4j.Slf4j;
-
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -9,6 +7,8 @@ import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.TimeUnit;
+
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class TxnPairExecutor {

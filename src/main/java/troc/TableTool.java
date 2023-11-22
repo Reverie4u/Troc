@@ -1,11 +1,21 @@
 package troc;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Scanner;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import lombok.extern.slf4j.Slf4j;
 import troc.common.Table;
-
-import java.sql.*;
-import java.util.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 public class TableTool {

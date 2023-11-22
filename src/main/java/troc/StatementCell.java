@@ -1,7 +1,5 @@
 package troc;
 
-import lombok.extern.slf4j.Slf4j;
-
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -9,6 +7,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import lombok.extern.slf4j.Slf4j;
 
 enum StatementType {
     UNKNOWN,
@@ -91,7 +91,7 @@ public class StatementCell {
                         for (String setPair : setPairsList) {
                             int eqIdx = setPair.indexOf("=");
                             String col = setPair.substring(0, eqIdx);
-                            String val = setPair.substring(eqIdx+1);
+                            String val = setPair.substring(eqIdx + 1);
                             if (val.startsWith("\"") && val.endsWith("\"")) {
                                 val = val.substring(1, val.length() - 1);
                             }
@@ -153,7 +153,8 @@ public class StatementCell {
             statement.close();
             rs.close();
             // 如果查询返回了结果，说明当前where子句已经可以选择行ID为rowId的指定行。
-            if (match) return;
+            if (match)
+                return;
             // 类似于PQS，给Where条件加上IS NULL或者NOT以确保能够查询到rowId的指定行。
             // 不过这里不是约束求解，而是直接查询数据库。
             query = String.format("SELECT (%s) FROM %s WHERE %s = %d",
@@ -183,7 +184,7 @@ public class StatementCell {
 
     public void negateCondition() {
         String query = "SELECT (" + whereClause + ") as yes from " + TableTool.TableName + " limit 1";
-        TableTool.executeQueryWithCallback(query, (rs)->{
+        TableTool.executeQueryWithCallback(query, (rs) -> {
             try {
                 if (!rs.next()) {
                     String res = rs.getString("yes");

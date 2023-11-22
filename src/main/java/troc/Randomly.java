@@ -1,7 +1,11 @@
 package troc;
 
 import java.math.BigDecimal;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Random;
 import java.util.function.Supplier;
 
 public final class Randomly {
@@ -90,7 +94,7 @@ public final class Randomly {
 
     /**
      * a random element in the List
-    */
+     */
     public static <T> T fromList(List<T> list) {
         return list.get((int) getNextLong(0, list.size()));
     }
@@ -160,7 +164,7 @@ public final class Randomly {
 
     /**
      * [0,2]
-    */
+     */
     public static int smallNumber() {
         // no need to cache for small numbers
         return (int) (Math.abs(getThreadRandom().get().nextGaussian()) * 2);
@@ -294,7 +298,7 @@ public final class Randomly {
 
         };
 
-        private static final String ALPHANUMERIC_SPECIALCHAR_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#<>/.~-+*[]{} ^*?%_|&"; //()
+        private static final String ALPHANUMERIC_SPECIALCHAR_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#<>/.~-+*[]{} ^*?%_|&"; // ()
         private static final String ALPHANUMERIC_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
         private static final String NUMERIC_ALPHABET = "0123456789";
 
@@ -399,21 +403,21 @@ public final class Randomly {
 
     /**
      * 1/100
-    */
+     */
     private static boolean smallBiasProbability() {
         return getThreadRandom().get().nextInt(100) == 1;
     }
 
     /**
      * 1/10
-    */
+     */
     public static boolean getBooleanWithRatherLowProbability() {
         return getThreadRandom().get().nextInt(10) == 1;
     }
-    
+
     /**
      * 1/100
-    */
+     */
     public static boolean getBooleanWithSmallProbability() {
         return smallBiasProbability();
     }

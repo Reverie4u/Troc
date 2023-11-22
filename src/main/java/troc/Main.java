@@ -1,14 +1,14 @@
 package troc;
 
-import troc.common.Table;
-import com.beust.jcommander.JCommander;
-import lombok.extern.slf4j.Slf4j;
-
-
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.util.Arrays;
 import java.util.Scanner;
+
+import com.beust.jcommander.JCommander;
+
+import lombok.extern.slf4j.Slf4j;
+import troc.common.Table;
 
 @Slf4j
 public class Main {
@@ -23,19 +23,6 @@ public class Main {
 
         txnTesting(options);
         TableTool.cleanTrocTables();
-        // Thread myThread = new Thread(()->{
-        //    try {
-        //        txnTesting(options);
-        //    } finally {
-        //        TableTool.cleanTrocTables();
-        //    } 
-        // });
-        // myThread.start();
-        // try {
-        //     myThread.join(options.getTimeout()*1000L);
-        // } catch (InterruptedException e) {
-        //     e.printStackTrace();
-        // }
     }
 
     private static void txnTesting(Options options) {
@@ -83,15 +70,16 @@ public class Main {
                 log.info("Create new table.");
                 try {
                     Thread.sleep(1000);
-                } catch (InterruptedException e) {}
+                } catch (InterruptedException e) {
+                }
                 Table table = TableTool.dbms.buildTable(options.getTableName());
                 table.initialize();
-                if(table.getInitRowCount() == 0) {
+                if (table.getInitRowCount() == 0) {
                     log.info("Table is empty, skip.");
                     continue;
                 }
                 log.info(table.getCreateTableSql());
-                log.info("InitializeStatements: {}",table.getInitializeStatements());
+                log.info("InitializeStatements: {}", table.getInitializeStatements());
                 // 这个地方已经创建好表了，并填充数据了
                 TableTool.preProcessTable();
                 TableTool.bugReport.setCreateTableSQL(table.getCreateTableSql());
@@ -104,15 +92,16 @@ public class Main {
                     TableTool.txPair++;
                     try {
                         Thread.sleep(1000);
-                    } catch (InterruptedException e) {}
+                    } catch (InterruptedException e) {
+                    }
                     // 恢复原始table
                     TableTool.recoverOriginalTable();
-                    log.info("Current table(1):\n{}",TableTool.tableToView());
+                    log.info("Current table(1):\n{}", TableTool.tableToView());
                     // 生成两个事务
                     tx1 = table.genTransaction(1);
                     tx2 = table.genTransaction(2);
                     TableTool.recoverOriginalTable();
-                    log.info("Current table(2):\n{}",TableTool.tableToView());
+                    log.info("Current table(2):\n{}", TableTool.tableToView());
                     // 手动构建冲突
                     TableTool.makeConflict(tx1, tx2, table);
                     TableTool.bugReport.setTx1(tx1);
@@ -122,7 +111,7 @@ public class Main {
                     TrocChecker checker = new TrocChecker(tx1, tx2);
                     // 随机生成提交顺序
                     checker.checkRandom();
-                    if(TableTool.txPairHasConflict){
+                    if (TableTool.txPairHasConflict) {
                         TableTool.conflictTxPair++;
                     }
                 }
@@ -132,7 +121,7 @@ public class Main {
 
     private static void verifyOptions(Options options) {
         options.setDBMS(options.getDBMS().toUpperCase());
-        if(Arrays.stream(DBMS.values()).map(DBMS::name).noneMatch(options.getDBMS()::equals)) {
+        if (Arrays.stream(DBMS.values()).map(DBMS::name).noneMatch(options.getDBMS()::equals)) {
             throw new RuntimeException("Unknown DBMS: " + options.getDBMS());
         }
     }

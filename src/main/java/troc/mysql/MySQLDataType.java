@@ -1,9 +1,9 @@
 package troc.mysql;
 
+import java.util.Arrays;
+
 import troc.Randomly;
 import troc.common.DataType;
-
-import java.util.Arrays;
 
 public enum MySQLDataType implements DataType {
     TINYINT, SMALLINT, MEDIUMINT, INT, BIGINT,
