@@ -103,7 +103,7 @@ public class Main {
                     TableTool.recoverOriginalTable();
                     log.info("Current table(2):\n{}", TableTool.tableToView());
                     // 手动构建冲突
-                    TableTool.makeConflict(tx1, tx2, table);
+                    // TableTool.makeConflict(tx1, tx2, table);
                     TableTool.bugReport.setTx1(tx1);
                     TableTool.bugReport.setTx2(tx2);
                     log.info("Transaction 1:\n{}", tx1);
