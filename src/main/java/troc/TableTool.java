@@ -249,20 +249,10 @@ public class TableTool {
             return;
         }
         int n = table.getInitRowCount() + 1;
-        if (Randomly.getBoolean() || n == 0) {
-            // Randomly.getBoolean()有50%概率为true
-            // 将一条语句的where条件变成和另一条语句一样
-            stmt1.whereClause = stmt2.whereClause;
-            stmt1.recomputeStatement();
-        } else {
-            // 随机选取一行数据，确保两个事务都能修改到
-            int rowId = Randomly.getNextInt(1, n);
-            try {
-                stmt1.makeChooseRow(rowId);
-                stmt2.makeChooseRow(rowId);
-            } catch (Exception e) {
-            }
-        }
+        // Randomly.getBoolean()有50%概率为true
+        // 将一条语句的where条件变成和另一条语句一样
+        stmt1.whereClause = stmt2.whereClause;
+        stmt1.recomputeStatement();
     }
 
     static private StatementCell randomStmtWithCondition(Transaction tx) {
