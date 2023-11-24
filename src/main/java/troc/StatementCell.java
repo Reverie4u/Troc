@@ -32,6 +32,7 @@ public class StatementCell {
     View view;
     ArrayList<Object> result;
     int newRowId;
+    String exceptionMessage = "";
 
     StatementCell(Transaction tx, int statementId) {
         this.tx = tx;

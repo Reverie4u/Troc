@@ -577,11 +577,28 @@ public class TrocChecker {
         ArrayList<StatementCell> execOrder = execRes.getOrder();
         ArrayList<StatementCell> oracleOrder = oracleRes.getOrder();
         int minLen = Math.min(execOrder.size(), oracleOrder.size());
+        if (execRes.isSematicError()) {
+            log.info("Ignore: Sematic Error");
+            bugInfo += " -- Ignore: Sematic Error";
+            TableTool.skipCase++;
+            return true;
+        }
         if (execRes.isDeadBlock() && !oracleRes.isDeadBlock()) {
             log.info("Ignore: Undecided");
             bugInfo += " -- Ignore: Undecided";
             TableTool.skipCase++;
             return true;
+        }
+        if (execRes.isDeadBlock() && oracleRes.isDeadBlock()) {
+            // 两个都阻塞的情况，只比较第一个阻塞点前的语句
+            // 或者说可以比较第二个阻塞点之前的语句？
+            int blockIndex = 0;
+            for (int i = 0; i < oracleOrder.size(); i++) {
+                if (oracleOrder.get(i).blocked) {
+                    blockIndex = i;
+                }
+            }
+            minLen = Math.min(minLen, blockIndex);
         }
         for (int i = 0; i < minLen; i++) {
             StatementCell oStmt = oracleOrder.get(i);

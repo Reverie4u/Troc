@@ -22,6 +22,7 @@ public class TxnPairExecutor {
     private ArrayList<Object> finalState;
 
     private boolean isDeadLock = false;
+    private boolean isSematicError = false;
     private boolean timeout = false;
     private String exceptionMessage = "";
     private final Map<Integer, Boolean> txnAbort = new HashMap<>();
@@ -35,7 +36,7 @@ public class TxnPairExecutor {
     TxnPairResult getResult() {
         if (result == null) {
             execute();
-            result = new TxnPairResult(actualSchedule, finalState, isDeadLock);
+            result = new TxnPairResult(actualSchedule, finalState, isDeadLock, isSematicError);
         }
         return result;
     }
@@ -86,6 +87,27 @@ public class TxnPairExecutor {
             this.queue2 = queue2;
             this.schedule = schedule;
             this.communicationID = communicationID;
+        }
+
+        private boolean needBreak(String exceptionMessage, int txn, StatementCell statementCell) {
+            if (exceptionMessage.contains("Data truncation")) {
+                // 说明本次执行的语句语义错误，直接结束本次测试
+                isSematicError = true;
+                return true;
+            }
+
+            if (exceptionMessage.contains("Deadlock") || exceptionMessage.contains("lock=true")) { // deadlock
+                log.info("exceptionMessage: {}", exceptionMessage);
+                log.info(" -- DeadLock happened(2)");
+                isDeadLock = true;
+                return true;
+            }
+            if (exceptionMessage.contains("restart") || exceptionMessage.contains("aborted")
+                    || exceptionMessage.contains("TransactionRetry")) {
+                txnAbort.put(txn, true);
+                statementCell.aborted = true;
+            }
+            return false;
         }
 
         public void run() {
@@ -143,6 +165,13 @@ public class TxnPairExecutor {
                     stmts.add(statementCell);
                     blockedStmts.put(txn, stmts);
                 } else {
+                    // 需要查看queryReturn的exceptionMessage
+                    String curExceptiommMessage = queryReturn.exceptionMessage;
+                    if (curExceptiommMessage.length() > 0) {
+                        if (needBreak(curExceptiommMessage, txn, queryReturn)) {
+                            break out;
+                        }
+                    }
                     if ((statementCell.type == StatementType.COMMIT || statementCell.type == StatementType.ROLLBACK)
                             && txnBlock.get(otherTxn)) {
                         // 如果当前语句是提交或回滚语句，且另一个事务被阻塞，那么当前语句执行完成后，另一个事务会取消阻塞
@@ -162,12 +191,16 @@ public class TxnPairExecutor {
                             log.info(" -- next return failed: " + statementCell.statement);
                             break;
                         } else {
-                            if (queryReturn.statement.equals(statementCell.statement)) {
+                            String nextExceptiommMessage = nextReturn.exceptionMessage;
+                            if (nextExceptiommMessage.length() > 0) {
+                                if (needBreak(nextExceptiommMessage, txn, queryReturn)) {
+                                    break out;
+                                }
+                            }
+                            if (queryReturn.toString().equals(statementCell.toString())) {
                                 statementCell.result = queryReturn.result;
                                 blockedStmts.get(otherTxn).get(0).result = nextReturn.result;
                             } else {
-                                // 这个分支有可能进入吗？貌似多线程状态确实可能
-                                log.info(" -- Impossible branch(1)");
                                 statementCell.result = nextReturn.result;
                                 blockedStmts.get(otherTxn).get(0).result = queryReturn.result;
                             }
@@ -218,30 +251,30 @@ public class TxnPairExecutor {
                                 log.info(" -- " + txn + "." + statementCell.statementId + ": still time out");
                                 timeout = true;
                             } else {
+                                String blockedExceptiommMessage = blockedReturn.exceptionMessage;
+                                if (blockedExceptiommMessage.length() > 0) {
+                                    if (needBreak(blockedExceptiommMessage, txn, queryReturn)) {
+                                        break out;
+                                    }
+                                }
                                 blockedStmtCell.result = blockedReturn.result;
                                 actualSchedule.add(blockedStmtCell);
                             }
                         }
                     }
                 }
-                // 出现异常/死锁/超时
-                if (exceptionMessage.length() > 0 || (txnBlock.get(1) && txnBlock.get(2)) || timeout) {
-                    if (exceptionMessage.contains("Deadlock") || exceptionMessage.contains("lock=true")
-                            || (txnBlock.get(1) && txnBlock.get(2))) { // deadlock
+                // 出现死锁/超时
+                if ((txnBlock.get(1) && txnBlock.get(2)) || timeout) {
+                    if (txnBlock.get(1) && txnBlock.get(2)) { // deadlock
                         log.info("exceptionMessage: {}", exceptionMessage);
                         log.info(" -- DeadLock happened(2)");
                         isDeadLock = true;
-                        break;
-                    }
-                    if (exceptionMessage.contains("restart") || exceptionMessage.contains("aborted")
-                            || exceptionMessage.contains("TransactionRetry")) {
-                        txnAbort.put(txn, true);
-                        statementCell.aborted = true;
+                        break out;
                     }
                 }
             }
             // 发生死锁时，跳出for循环
-            if (isDeadLock) {
+            if (isDeadLock || isSematicError) {
                 try {
                     tx1.conn.createStatement().executeUpdate("ROLLBACK"); // stop transaction
                     tx2.conn.createStatement().executeUpdate("ROLLBACK");
@@ -312,14 +345,13 @@ public class TxnPairExecutor {
                         } else {
                             stmt.tx.conn.createStatement().executeUpdate(query);
                         }
-                        exceptionMessage = "";
-                        // communicationID.put(stmt); // communicate to main thread
+                        stmt.exceptionMessage = "";
                     } catch (SQLException e) {
                         log.info(" -- TXNThread threadExec exception");
                         log.info("Query {}: {}", stmt, query);
-                        exceptionMessage = e.getMessage();
-                        log.info("SQL Exception: " + exceptionMessage);
-                        exceptionMessage = exceptionMessage + "; [Query] " + query;
+                        stmt.exceptionMessage = e.getMessage();
+                        log.info("SQL Exception: " + stmt.exceptionMessage);
+                        stmt.exceptionMessage = stmt.exceptionMessage + "; [Query] " + query;
                     } finally {
                         try {
                             // communicationID是一个阻塞队列，用于两个消费者与生产者进行通信
