@@ -487,7 +487,7 @@ public class TrocChecker {
             allView = buildTxView(curTx, otherTx, true);
         }
         // 获取影响行数的时候不能包含已删除的行
-        HashSet<Integer> rowIds = getAffectedRows(stmt, curView);
+        HashSet<Integer> rowIds = getAffectedRows(stmt, allView);
         String snapshotName = "update_version";
         TableTool.takeSnapshotForTable(snapshotName);
         TableTool.viewToTable(curView);
