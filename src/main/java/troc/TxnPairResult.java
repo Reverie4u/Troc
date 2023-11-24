@@ -6,14 +6,17 @@ public class TxnPairResult {
     private ArrayList<StatementCell> order;
     private ArrayList<Object> finalState;
     private boolean isDeadBlock;
+    private boolean isSematicError;
 
     public TxnPairResult() {
     }
 
-    public TxnPairResult(ArrayList<StatementCell> order, ArrayList<Object> finalState, boolean isDeadBlock) {
+    public TxnPairResult(ArrayList<StatementCell> order, ArrayList<Object> finalState, boolean isDeadBlock,
+            boolean isSematicError) {
         this.order = order;
         this.finalState = finalState;
         this.isDeadBlock = isDeadBlock;
+        this.isSematicError = isSematicError;
     }
 
     public void setOrder(ArrayList<StatementCell> order) {
@@ -40,6 +43,14 @@ public class TxnPairResult {
         return isDeadBlock;
     }
 
+    public void setSematicError(boolean isSematicError) {
+        this.isSematicError = isSematicError;
+    }
+
+    public boolean isSematicError() {
+        return isSematicError;
+    }
+
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
@@ -51,6 +62,7 @@ public class TxnPairResult {
         }
         sb.append("FinalState: ").append(finalState).append("\n");
         sb.append("DeadBlock: ").append(isDeadBlock).append("\n");
+        sb.append("SematicError: ").append(isSematicError).append("\n");
         return sb.toString();
     }
 }
