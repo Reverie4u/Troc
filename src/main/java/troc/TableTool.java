@@ -76,15 +76,17 @@ public class TableTool {
     static SQLConnection getConnectionFromOptions(Options options) {
         Connection con;
         try {
-            String url = String.format("jdbc:%s://%s:%d/", dbms.getProtocol(), options.getHost(),
+            String baseUrl = String.format("jdbc:%s://%s:%d/", dbms.getProtocol(), options.getHost(),
                     options.getPort());
-            con = DriverManager.getConnection(url, options.getUserName(), options.getPassword());
+            String extendUrl = "?user=" + options.getUserName() + "&password=" +
+                    options.getPassword() + "&enabledTLSProtocols=TLSv1.2,TLSv1.3";
+            con = DriverManager.getConnection(baseUrl + extendUrl);
             Statement statement = con.createStatement();
             statement.execute("DROP DATABASE IF EXISTS " + options.getDbName());
             statement.execute("CREATE DATABASE " + options.getDbName());
             statement.close();
             con.close();
-            con = DriverManager.getConnection(url + options.getDbName(), options.getUserName(), options.getPassword());
+            con = DriverManager.getConnection(baseUrl + options.getDbName() + extendUrl);
         } catch (Exception e) {
             throw new RuntimeException("Failed to connect to database: ", e);
         }
