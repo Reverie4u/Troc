@@ -2,6 +2,7 @@ package troc;
 
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Scanner;
 
@@ -113,6 +114,13 @@ public class Main {
                     checker.checkRandom();
                     if (TableTool.txPairHasConflict) {
                         TableTool.conflictTxPair++;
+                    }
+                    try {
+                        tx1.conn.close();
+                        tx2.conn.close();
+                    } catch (SQLException e) {
+                        log.info("Close connection failed.");
+                        e.printStackTrace();
                     }
                 }
             }
