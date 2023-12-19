@@ -51,6 +51,8 @@ public class TableTool {
     static String insertPrefix;
     static int nextRowId;
     static Transaction firstTxnInSerOrder;
+    static public boolean isInsertConflict = false;
+    static public String filterConflict = "random";
 
     static void initialize(Options options) {
         dbms = DBMS.valueOf(options.getDBMS());
@@ -58,6 +60,8 @@ public class TableTool {
         DatabaseName = options.getDbName();
         TableTool.options = options;
         TableTool.conn = getConnectionFromOptions(options);
+        isInsertConflict = options.isInsertConflict();
+        filterConflict = options.getFilterConflict();
 
         possibleIsolationLevels = new ArrayList<>(
                 Arrays.asList(IsolationLevel.READ_COMMITTED, IsolationLevel.REPEATABLE_READ));
@@ -244,35 +248,169 @@ public class TableTool {
      * @param tx2
      */
     static void makeConflict(Transaction tx1, Transaction tx2, Table table) {
-        StatementCell stmt1 = randomStmtWithCondition(tx1);
-        StatementCell stmt2 = randomStmtWithCondition(tx2);
-        if (!(stmt1 != null && stmt2 != null)) {
-            log.info("make conflict failed: stmt1: {}, stmt2: {}", stmt1, stmt2);
+        StatementCell[] stmts = randomStmts(tx1, tx2);
+        if (!(stmts[0] != null && stmts[1] != null)) {
+            log.info("make conflict failed: stmt1: {}, stmt2: {}", stmts[0], stmts[1]);
             return;
         }
-        int n = table.getInitRowCount() + 1;
-        if (Randomly.getBoolean() || n == 0) {
-            // Randomly.getBoolean()有50%概率为true
-            // 将一条语句的where条件变成和另一条语句一样
-            stmt1.whereClause = stmt2.whereClause;
-            stmt1.recomputeStatement();
-        } else {
-            // 随机选取一行数据，确保两个事务都能修改到
-            int rowId = Randomly.getNextInt(1, n);
-            try {
-                stmt1.makeChooseRow(rowId);
-                stmt2.makeChooseRow(rowId);
-            } catch (Exception e) {
+        if (stmts[0].type == StatementType.INSERT && stmts[1].type == StatementType.INSERT) {
+            log.info("make conflict failed, two insert stmts: stmt1: {}, stmt2: {}", stmts[0], stmts[1]);
+            return;
+        }
+        if (TableTool.isInsertConflict) {
+            if (stmts[0].type == StatementType.INSERT && stmts[1].type != StatementType.INSERT) {
+                makeInsertConflict(stmts[0], stmts[1], table);
+                return;
             }
+            if (stmts[1].type == StatementType.INSERT && stmts[0].type != StatementType.INSERT) {
+                makeInsertConflict(stmts[1], stmts[0], table);
+                return;
+            }
+        }
+        switch (TableTool.filterConflict) {
+            case "fully-shared-filters":
+                makeFullySharedFiltersConflict(stmts[0], stmts[1], table);
+                break;
+            case "partially-shared-filters":
+                makePartiallySharedFiltersConflict(stmts[0], stmts[1], table);
+                break;
+            case "conflict-tuple-containment":
+                makeConflictTupleContainmentConflict(stmts[0], stmts[1], table);
+                break;
+            case "random":
+                makeRandomFilterConflict(stmts[0], stmts[1], table);
+                break;
+            case "none":
+                break;
+            default:
+                log.info("wrong filter conflict: {}", TableTool.filterConflict);
+                break;
+        }
+
+    }
+
+    static void makeInsertConflict(StatementCell s1, StatementCell s2, Table table) {
+        // s1是INSERT语句
+        // 构造视图view
+        Object[] row = new Object[ColCount - 1];
+        s1.values.forEach((k, v) -> {
+            int idx = colNames.indexOf(k);
+            row[idx] = v;
+        });
+        View view = new View();
+        view.data.put(1, row);
+        // 视图dump到表中
+        viewToTable(view);
+        String query = null;
+        Statement statement;
+        ResultSet rs;
+        try {
+            query = String.format("SELECT %s FROM %s", s2.whereClause, TableTool.TableName);
+            log.info(query);
+            statement = TableTool.conn.createStatement();
+            rs = statement.executeQuery(query);
+            boolean match = rs.next();
+            if (!rs.next()) {
+                log.info(TableTool.tableToView().toString());
+                return;
+            }
+            Object res = rs.getObject(1);
+            if (res == null) {
+                s2.whereClause = "(" + s2.whereClause + ") IS NULL";
+            } else {
+                boolean result = (Boolean) res;
+                if (!result) {
+                    s2.whereClause = "NOT (" + s2.whereClause + ")";
+                }
+            }
+            s2.recomputeStatement();
+        } catch (SQLException e) {
+            log.info("Execute query failed: {}", query);
+            throw new RuntimeException("Execution failed: ", e);
         }
     }
 
-    static private StatementCell randomStmtWithCondition(Transaction tx) {
+    static void makeFullySharedFiltersConflict(StatementCell s1, StatementCell s2, Table table) {
+        s2.whereClause = s1.whereClause;
+        s2.recomputeStatement();
+    }
+
+    static void makePartiallySharedFiltersConflict(StatementCell s1, StatementCell s2, Table table) {
+        s2.whereClause = s1.whereClause + "OR" + s2.whereClause;
+        s2.recomputeStatement();
+    }
+
+    static void makeConflictTupleContainmentConflict(StatementCell s1, StatementCell s2, Table table) {
+        int n = table.getInitRowCount() + 1;
+        int rowId = Randomly.getNextInt(1, n);
+        try {
+            s1.makeChooseRow(rowId);
+            s2.makeChooseRow(rowId);
+        } catch (Exception e) {
+        }
+    }
+
+    static void makeRandomFilterConflict(StatementCell s1, StatementCell s2, Table table) {
+        int randomStatus = Randomly.getNextInt(0, 3);
+        switch (randomStatus) {
+            case 0:
+                makeFullySharedFiltersConflict(s1, s2, table);
+                break;
+            case 1:
+                makePartiallySharedFiltersConflict(s1, s2, table);
+                break;
+            case 2:
+                makeConflictTupleContainmentConflict(s1, s2, table);
+                break;
+            default:
+                break;
+        }
+    }
+
+    static private StatementCell[] randomStmts(Transaction tx1, Transaction tx2) {
+        // 从两个事务分别随机选择一条语句, 保证至少有一条是写语句, 且不是两个INSERT语句
+        StatementCell[] stmts = new StatementCell[2];
+        // 指定一下循环最大次数
+        int curIter = 0;
+        do {
+            Transaction curTx = Randomly.fromList(Arrays.asList(tx1, tx2));
+            Transaction otherTx = (curTx == tx1 ? tx2 : tx1);
+            stmts[0] = randomWriteStmtWithCondition(curTx);
+            stmts[1] = randomStmtWithCondition(otherTx);
+            curIter++;
+        } while (stmts[0] != null && stmts[0].type == StatementType.INSERT && stmts[1] != null
+                && stmts[1].type == StatementType.INSERT && curIter < 10);
+        // 再次打乱
+        if (Randomly.getBoolean()) {
+            StatementCell tmp = stmts[0];
+            stmts[0] = stmts[1];
+            stmts[1] = tmp;
+        }
+        return stmts;
+    }
+
+    static private StatementCell randomWriteStmtWithCondition(Transaction tx) {
+        // 随机选择写语句
         ArrayList<StatementCell> candidates = new ArrayList<>();
         for (StatementCell stmt : tx.statements) {
             if (stmt.type == StatementType.UPDATE || stmt.type == StatementType.DELETE
-                    || stmt.type == StatementType.SELECT || stmt.type == StatementType.SELECT_SHARE
-                    || stmt.type == StatementType.SELECT_UPDATE) {
+                    || stmt.type == StatementType.INSERT) {
+                candidates.add(stmt);
+            }
+        }
+        if (candidates.isEmpty()) {
+            return null;
+        }
+        return Randomly.fromList(candidates);
+    }
+
+    static private StatementCell randomStmtWithCondition(Transaction tx) {
+        // 随机选择读或写语句
+        ArrayList<StatementCell> candidates = new ArrayList<>();
+        for (StatementCell stmt : tx.statements) {
+            if (stmt.type == StatementType.UPDATE || stmt.type == StatementType.DELETE
+                    || stmt.type == StatementType.INSERT || stmt.type == StatementType.SELECT
+                    || stmt.type == StatementType.SELECT_SHARE || stmt.type == StatementType.SELECT_UPDATE) {
                 candidates.add(stmt);
             }
         }

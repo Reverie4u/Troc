@@ -36,4 +36,12 @@ public class Options {
 
     @Parameter(names = "--timeout", description = "The timeout of fuzzer, in seconds")
     private long timeout = 86400;
+
+    @Parameter(names = "--insert-conflict", description = "Whether consider insert conflict")
+    private boolean insertConflict = false;
+
+    // could be fully-shared-filter, partially-shared-filters,
+    // conflict-tuple-containment, random, none
+    @Parameter(names = "--filter-conflict", description = "Constructing methods of filter conflict")
+    private String filterConflict = "random";
 }
