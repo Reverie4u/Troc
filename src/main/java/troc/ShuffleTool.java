@@ -3,13 +3,106 @@ package troc;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Random;
+import java.util.Set;
 
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 public class ShuffleTool {
     public static ArrayList<ArrayList<StatementCell>> genAllSubmittedTrace(Transaction tx1, Transaction tx2) {
         int n1 = tx1.statements.size(), n2 = tx2.statements.size();
         ArrayList<ArrayList<StatementCell>> res = new ArrayList<>();
         shuffle(res, new ArrayList<>(), tx1.statements, n1, 0, tx2.statements, n2, 0);
+        log.info("before filter: {}, size: {}", res, res.size());
+        // 这里添加过滤逻辑
+        if (TableTool.isFilterSubmittedOrder) {
+            res = filterSubmittedOrder(res, tx1, tx2);
+        }
+        log.info("after filter: {}, size:{}", res, res.size());
         return res;
+    }
+
+    private static ArrayList<ArrayList<StatementCell>> filterSubmittedOrder(ArrayList<ArrayList<StatementCell>> res,
+            Transaction tx1, Transaction tx2) {
+        ArrayList<ArrayList<StatementCell>> filtered = new ArrayList<>();
+        ArrayList<StatementCell> invalid1 = new ArrayList<>();
+        ArrayList<StatementCell> invalid2 = new ArrayList<>();
+        for (int i = 0; i < tx1.statements.size(); i++) {
+            invalid1.add(new StatementCell(new Transaction(1), i));
+        }
+        for (int i = 0; i < tx2.statements.size(); i++) {
+            invalid1.add(new StatementCell(new Transaction(2), i));
+        }
+        for (int i = 0; i < tx2.statements.size(); i++) {
+            invalid2.add(new StatementCell(new Transaction(2), i));
+        }
+        for (int i = 0; i < tx1.statements.size(); i++) {
+            invalid2.add(new StatementCell(new Transaction(1), i));
+        }
+        for (ArrayList<StatementCell> trace : res) {
+            String traceStr = trace.toString();
+            // 去除事务没有交叉的提交顺序
+            if (trace.toString().equals(invalid1.toString()) || trace.toString().equals(invalid2.toString())) {
+                continue;
+            }
+            // 去除不符合异常历史的提交顺序
+            if (!containAnomalousHistory(trace, tx1, tx2)) {
+                continue;
+            }
+            // 将两个连续的begin统一变成begin(tx1) begin(tx2)
+            if (trace.get(0).statementId == 0 && trace.get(1).statementId == 0) {
+                if (trace.get(0).tx.txId == 2) {
+                    // 交换一下
+                    StatementCell tmp = trace.get(0);
+                    trace.set(0, trace.get(1));
+                    trace.set(1, tmp);
+                }
+            }
+            filtered.add(trace);
+        }
+        // 对ArrayList<ArrayList<StatementCell>>去重
+        Set<String> set = new HashSet<>();
+        ArrayList<ArrayList<StatementCell>> result = new ArrayList<>();
+        for (ArrayList<StatementCell> trace : filtered) {
+            String traceStr = trace.toString();
+            if (!set.contains(traceStr)) {
+                set.add(traceStr);
+                result.add(trace);
+            }
+        }
+        return result;
+    }
+
+    private static boolean containAnomalousHistory(ArrayList<StatementCell> trace, Transaction tx1, Transaction tx2) {
+        // 冲突语句必须要在两个提交前面
+        if (trace == null || trace.isEmpty()) {
+            return false;
+        }
+        if (tx1.conflictStmtId == -1 || tx2.conflictStmtId == -1) {
+            // 没有构造冲突，不需要考虑
+            return true;
+        }
+        int tx1ConflictIdx = -1, tx2ConflictIdx = -1, tx1CommitIdx = -1, tx2CommitIdx = -1;
+        // 找到冲突语句及提交语句的位置
+        for (int i = 0; i < trace.size(); i++) {
+            StatementCell stmt = trace.get(i);
+            if (stmt.tx.txId == 1) {
+                if (stmt.statementId == tx1.conflictStmtId) {
+                    tx1ConflictIdx = i;
+                }
+                if (stmt.statementId == tx1.statements.size() - 1) {
+                    tx1CommitIdx = i;
+                }
+            } else if (stmt.tx.txId == 2) {
+                if (stmt.statementId == tx2.conflictStmtId) {
+                    tx2ConflictIdx = i;
+                }
+                if (stmt.statementId == tx2.statements.size() - 1) {
+                    tx2CommitIdx = i;
+                }
+            }
+        }
+        return Math.max(tx1ConflictIdx, tx2ConflictIdx) < Math.min(tx1CommitIdx, tx2CommitIdx);
     }
 
     // 枚举生成所有可能的提交顺序

@@ -7,6 +7,7 @@ import lombok.Data;
 @Data
 public class Transaction {
     int txId;
+    int conflictStmtId;
     SQLConnection conn;
     IsolationLevel isolationlevel;
     ArrayList<StatementCell> statements;
@@ -24,6 +25,7 @@ public class Transaction {
     public Transaction(int txId) {
         this.txId = txId;
         statements = new ArrayList<>();
+        conflictStmtId = -1;
     }
 
     public Transaction(int txId, IsolationLevel isolationlevel, SQLConnection conn) {

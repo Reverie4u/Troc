@@ -44,4 +44,10 @@ public class Options {
     // conflict-tuple-containment, random, none
     @Parameter(names = "--filter-conflict", description = "Constructing methods of filter conflict")
     private String filterConflict = "random";
+
+    @Parameter(names = "--filter-submitted-order", description = "Whether to enable submission order filtering")
+    private boolean filterSubmittedOrder = false;
+
+    @Parameter(names = "--submitted-order-sample-count", description = "Sampling count of submission order")
+    private int submittedOrderSampleCount = 10;
 }

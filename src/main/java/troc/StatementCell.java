@@ -34,7 +34,7 @@ public class StatementCell {
     int newRowId;
     String exceptionMessage = "";
 
-    StatementCell(Transaction tx, int statementId) {
+    public StatementCell(Transaction tx, int statementId) {
         this.tx = tx;
         this.statementId = statementId;
     }

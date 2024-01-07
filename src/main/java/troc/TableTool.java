@@ -26,7 +26,6 @@ public class TableTool {
     static private final String OriginalName = "origin";
     static public final int TxSizeMin = 3;
     static public final int TxSizeMax = 6;
-    static public final int CheckSize = 10;
     static public final Transaction txInit = new Transaction(0);
     static public final Randomly rand = new Randomly();
     static public final BugReport bugReport = new BugReport();
@@ -53,6 +52,8 @@ public class TableTool {
     static Transaction firstTxnInSerOrder;
     static public boolean isInsertConflict = false;
     static public String filterConflict = "random";
+    static public boolean isFilterSubmittedOrder = false;
+    static public int submittedOrderSampleCount = 10;
 
     static void initialize(Options options) {
         dbms = DBMS.valueOf(options.getDBMS());
@@ -62,7 +63,8 @@ public class TableTool {
         TableTool.conn = getConnectionFromOptions(options);
         isInsertConflict = options.isInsertConflict();
         filterConflict = options.getFilterConflict();
-
+        isFilterSubmittedOrder = options.isFilterSubmittedOrder();
+        submittedOrderSampleCount = options.getSubmittedOrderSampleCount();
         possibleIsolationLevels = new ArrayList<>(
                 Arrays.asList(IsolationLevel.READ_COMMITTED, IsolationLevel.REPEATABLE_READ));
         if (TableTool.dbms == DBMS.MYSQL || TableTool.dbms == DBMS.MARIADB) {
@@ -260,25 +262,38 @@ public class TableTool {
         if (TableTool.isInsertConflict) {
             if (stmts[0].type == StatementType.INSERT && stmts[1].type != StatementType.INSERT) {
                 makeInsertConflict(stmts[0], stmts[1], table);
+                // 标记冲突语句的编号
+                stmts[0].tx.conflictStmtId = stmts[0].statementId;
+                stmts[1].tx.conflictStmtId = stmts[1].statementId;
                 return;
             }
             if (stmts[1].type == StatementType.INSERT && stmts[0].type != StatementType.INSERT) {
                 makeInsertConflict(stmts[1], stmts[0], table);
+                stmts[0].tx.conflictStmtId = stmts[0].statementId;
+                stmts[1].tx.conflictStmtId = stmts[1].statementId;
                 return;
             }
         }
         switch (TableTool.filterConflict) {
             case "fully-shared-filters":
                 makeFullySharedFiltersConflict(stmts[0], stmts[1], table);
+                stmts[0].tx.conflictStmtId = stmts[0].statementId;
+                stmts[1].tx.conflictStmtId = stmts[1].statementId;
                 break;
             case "partially-shared-filters":
                 makePartiallySharedFiltersConflict(stmts[0], stmts[1], table);
+                stmts[0].tx.conflictStmtId = stmts[0].statementId;
+                stmts[1].tx.conflictStmtId = stmts[1].statementId;
                 break;
             case "conflict-tuple-containment":
                 makeConflictTupleContainmentConflict(stmts[0], stmts[1], table);
+                stmts[0].tx.conflictStmtId = stmts[0].statementId;
+                stmts[1].tx.conflictStmtId = stmts[1].statementId;
                 break;
             case "random":
                 makeRandomFilterConflict(stmts[0], stmts[1], table);
+                stmts[0].tx.conflictStmtId = stmts[0].statementId;
+                stmts[1].tx.conflictStmtId = stmts[1].statementId;
                 break;
             case "none":
                 break;

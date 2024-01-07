@@ -46,7 +46,7 @@ public class TrocChecker {
     }
 
     public void checkRandom() {
-        checkRandom(TableTool.CheckSize);
+        checkRandom(TableTool.submittedOrderSampleCount);
     }
 
     public void checkRandom(int count) {
