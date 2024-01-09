@@ -80,7 +80,26 @@ public class ShuffleTool {
         }
         if (tx1.conflictStmtId == -1 || tx2.conflictStmtId == -1) {
             // 没有构造冲突，不需要考虑
-            return true;
+            // 找到两个事务的第一条非begin语句,即提交语句的位置
+            int tx1FirstIdx = -1, tx2FirstIdx = -1, tx1CommitIdx = -1, tx2CommitIdx = -1;
+            // 找到冲突语句及提交语句的位置
+            for (int i = 0; i < trace.size(); i++) {
+                StatementCell stmt = trace.get(i);
+                if (stmt.tx.txId == 1) {
+                    if (stmt.statementId == 1) {
+                        tx1FirstIdx = i;
+                    }else if (stmt.statementId == tx1.statements.size() - 1) {
+                        tx1CommitIdx = i;
+                    }
+                } else if (stmt.tx.txId == 2) {
+                    if (stmt.statementId == 1) {
+                        tx2FirstIdx = i;
+                    }else if (stmt.statementId == tx2.statements.size() - 1) {
+                        tx2CommitIdx = i;
+                    }
+                }
+            }
+            return Math.max(tx1FirstIdx, tx2FirstIdx) < Math.min(tx1CommitIdx, tx2CommitIdx);
         }
         int tx1ConflictIdx = -1, tx2ConflictIdx = -1, tx1CommitIdx = -1, tx2CommitIdx = -1;
         // 找到冲突语句及提交语句的位置
