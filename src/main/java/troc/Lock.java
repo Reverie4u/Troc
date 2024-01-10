@@ -32,6 +32,7 @@ public class Lock {
                     return true;
                 }
             }
+            // 间隙锁，需要仔细看，这块有问题
             if (useRangeLock(this.stmt) && isRangeConflict(otherLock.stmt, this.stmt)) {
                 return true;
             }

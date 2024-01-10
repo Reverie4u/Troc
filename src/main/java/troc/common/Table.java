@@ -96,6 +96,7 @@ public abstract class Table {
 
     public String genSelectStatement() {
         String predicate = exprGenerator.genPredicate();
+        // 不支持distinct
         List<String> selectedColumns = Randomly.nonEmptySubset(columnNames);
         String postfix = "";
         if (Randomly.getBoolean()) {

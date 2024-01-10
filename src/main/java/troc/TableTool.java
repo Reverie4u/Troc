@@ -476,25 +476,31 @@ public class TableTool {
         lock.stmt = stmt;
         lock.type = LockType.NONE;
         if (stmt.type == StatementType.SELECT) {
+            // 串行化隔离级别下快照读加共享锁
             if (stmt.tx.isolationlevel == IsolationLevel.SERIALIZABLE) {
                 lock.type = LockType.SHARE;
             }
         } else if (stmt.type == StatementType.SELECT_SHARE) {
+            // 共享锁
             lock.type = LockType.SHARE;
         } else if (stmt.type == StatementType.SELECT_UPDATE
                 || stmt.type == StatementType.UPDATE || stmt.type == StatementType.DELETE
                 || stmt.type == StatementType.INSERT) {
+            // 互斥锁
             lock.type = LockType.EXCLUSIVE;
         }
-        if (lock.type == LockType.NONE && stmt.type != StatementType.SELECT)
+        // 锁类型为None直接返回
+        if (lock.type == LockType.NONE)
             return lock;
         lock.lockObject = getLockObjectFromStmtView(stmt);
         return lock;
     }
 
     static LockObject getLockObjectFromStmtView(StatementCell stmt) {
+        // 感觉这个也需要改成约束求解方式
         String snapshotName = "get_lock";
         TableTool.takeSnapshotForTable(snapshotName);
+        // 语句可见的视图dump成表
         TableTool.viewToTable(stmt.view);
         LockObject lockObject = getLockObject(stmt);
         TableTool.recoverTableFromSnapshot(snapshotName);
@@ -507,6 +513,7 @@ public class TableTool {
         HashSet<Integer> lockedRowIds = new HashSet<>();
         HashSet<String> lockedKeys = new HashSet<>();
         if (stmt.type == StatementType.INSERT) {
+            // 如果是insert语句，那么锁住insert value需要插入的所有索引；
             lockedKeys = getIndexObjs(stmt.values);
         } else {
             HashSet<String> indexObjs = new HashSet<>();
@@ -529,6 +536,7 @@ public class TableTool {
                         }
                         indexObjs.addAll(getIndexObjs(rowValues));
                         if (stmt.type == StatementType.UPDATE) {
+                            // 对于update语句，除了需要锁住查询出的值，还要锁住更新后的值
                             rowValues.putAll(stmt.values);
                             indexObjs.addAll(getIndexObjs(rowValues));
                         }

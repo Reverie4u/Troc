@@ -197,13 +197,12 @@ public class TrocChecker {
             return false;
         }
         // 读未提交下，SELECT_SHARE和SELECT_UPDATE直接获取最新的数据, 理论上SELECT也应该直接获取最新数据？
-        if (curTx.isolationlevel == IsolationLevel.READ_UNCOMMITTED
-                && (stmt.type == StatementType.SELECT_SHARE || stmt.type == StatementType.SELECT_UPDATE)) {
-            stmt.view = newView();
-        } else {
-            stmt.view = buildTxView(curTx, otherTx, false);
-        }
+        stmt.view = newView();
+        log.info("stmt {}, view: {}", stmt, stmt.view);
+
+        // 锁分析
         Lock lock = TableTool.getLock(stmt);
+        log.info("lock: {}", lock.type);
         if (lock.isConflict(otherTx) && !otherTx.aborted && !otherTx.committed) {
             curTx.blocked = true;
             TableTool.firstTxnInSerOrder = otherTx;
@@ -225,6 +224,8 @@ public class TrocChecker {
             }
             curTx.snapView = snapshotView(curTx);
         }
+
+        // 在多版本链上执行语句
         View view;
         if (stmt.type == StatementType.BEGIN || stmt.type == StatementType.COMMIT
                 || stmt.type == StatementType.ROLLBACK) {
@@ -236,6 +237,7 @@ public class TrocChecker {
                 curTx.committed = true;
             }
             if (stmt.type == StatementType.ROLLBACK) {
+                // 回滚的时候把该事务在多版本链中的数据全部删掉
                 curTx.aborted = true;
                 curTx.finished = true;
                 curTx.locks.clear();
@@ -243,22 +245,23 @@ public class TrocChecker {
             }
         } else if (stmt.type == StatementType.SELECT) {
             if (curTx.isolationlevel == IsolationLevel.REPEATABLE_READ) {
+                // 读快照
                 view = snapshotView(curTx);
             } else if (curTx.isolationlevel == IsolationLevel.READ_UNCOMMITTED) {
+                // 读最新数据
                 view = newView();
             } else {
+                // 读已提交数据
                 view = buildTxView(curTx, otherTx, false);
             }
             stmt.result = queryOnView(stmt, view);
         } else if (stmt.type == StatementType.SELECT_SHARE || stmt.type == StatementType.SELECT_UPDATE) {
-            if (curTx.isolationlevel == IsolationLevel.READ_UNCOMMITTED) {
-                view = newView();
-            } else {
-                view = buildTxView(curTx, otherTx, false);
-            }
+            // 如果没有阻塞，就应该读最新版本数据
+            view = newView();
             stmt.result = queryOnView(stmt, view);
         } else if (stmt.type == StatementType.UPDATE || stmt.type == StatementType.INSERT
                 || stmt.type == StatementType.DELETE) {
+            // 更新多版本链
             updateVersion(stmt, curTx, otherTx);
             if (stmt.type == StatementType.INSERT && stmt.newRowId > 0) {
                 lock.lockObject.rowIds.add(stmt.newRowId);
@@ -267,122 +270,6 @@ public class TrocChecker {
             log.info("Weird Statement: {}", stmt);
         }
         return false;
-    }
-
-    private ArrayList<StatementCell> inferOracleOrderMVCC(ArrayList<StatementCell> schedule) {
-        TableTool.recoverOriginalTable();
-        isDeadlock = false;
-        ArrayList<StatementCell> oracleOrder = new ArrayList<>();
-        tx1.clearStates();
-        tx2.clearStates();
-        vData = TableTool.initVersionData();
-        for (StatementCell stmt : schedule) {
-            Transaction curTx = stmt.tx;
-            Transaction otherTx = curTx == tx1 ? tx2 : tx1;
-            if (curTx.blocked) {
-                curTx.blockedStatements.add(stmt);
-            } else if (otherTx.finished || stmt.type == StatementType.BEGIN) {
-                oracleOrder.add(stmt);
-            } else if (stmt.type == StatementType.COMMIT || stmt.type == StatementType.ROLLBACK) {
-                if (stmt.type == StatementType.COMMIT) {
-                    curTx.committed = true;
-                } else {
-                    deleteVersion(curTx);
-                }
-                oracleOrder.add(stmt);
-                curTx.finished = true;
-                curTx.locks.clear();
-                if (otherTx.blocked) {
-                    oracleOrder.addAll(otherTx.blockedStatements);
-                    otherTx.blocked = false;
-                    otherTx.blockedStatements.clear();
-                }
-            } else {
-                stmt.view = buildTxView(curTx, otherTx, false);
-                Lock lock = TableTool.getLock(stmt);
-                if (lock.isConflict(otherTx)) {
-                    curTx.blocked = true;
-                    StatementCell blockPoint = stmt.copy();
-                    blockPoint.blocked = true;
-                    oracleOrder.add(blockPoint);
-                    curTx.blockedStatements.add(stmt);
-                } else {
-                    oracleOrder.add(stmt);
-                    if (stmt.type == StatementType.UPDATE || stmt.type == StatementType.DELETE
-                            || stmt.type == StatementType.INSERT) {
-                        updateVersion(stmt, curTx, otherTx);
-                    }
-                    if (lock.type != LockType.NONE) {
-                        if (stmt.type == StatementType.INSERT && stmt.newRowId > 0) {
-                            lock.lockObject.rowIds.add(stmt.newRowId);
-                        }
-                        curTx.locks.add(lock);
-                    }
-                }
-            }
-            if (curTx.blocked && otherTx.blocked) {
-                isDeadlock = true;
-                tx1.clearStates();
-                tx2.clearStates();
-                return oracleOrder;
-            }
-        }
-        tx1.clearStates();
-        tx2.clearStates();
-        return oracleOrder;
-    }
-
-    private TxnPairResult obtainOracleResults(ArrayList<StatementCell> oracleOrder) {
-        TableTool.recoverOriginalTable();
-        vData = TableTool.initVersionData();
-        tx1.clearStates();
-        tx2.clearStates();
-        for (StatementCell stmt : oracleOrder) {
-            Transaction curTx = stmt.tx;
-            Transaction otherTx = curTx == tx1 ? tx2 : tx1;
-            if (curTx.snapTxs.isEmpty() && isSnapshotPoint(stmt)) {
-                curTx.snapTxs.addAll(Arrays.asList(TableTool.txInit, curTx));
-                if (otherTx.committed) {
-                    curTx.snapTxs.add(otherTx);
-                }
-                curTx.snapView = snapshotView(curTx);
-            }
-            if (stmt.blocked || stmt.type == StatementType.BEGIN) {
-                continue;
-            }
-            if (stmt.type == StatementType.COMMIT) {
-                curTx.committed = true;
-            }
-            if (stmt.type == StatementType.ROLLBACK) {
-                deleteVersion(curTx);
-            }
-            View view;
-            if (stmt.type == StatementType.SELECT) {
-                if (curTx.isolationlevel == IsolationLevel.REPEATABLE_READ) {
-                    view = snapshotView(curTx);
-                } else if (curTx.isolationlevel == IsolationLevel.READ_UNCOMMITTED) {
-                    view = newView();
-                } else {
-                    view = buildTxView(curTx, otherTx, false);
-                }
-                stmt.result = queryOnView(stmt, view);
-            }
-            if (stmt.type == StatementType.SELECT_SHARE || stmt.type == StatementType.SELECT_UPDATE) {
-                view = buildTxView(curTx, otherTx, false);
-                stmt.result = queryOnView(stmt, view);
-            }
-            if (stmt.type == StatementType.UPDATE || stmt.type == StatementType.INSERT
-                    || stmt.type == StatementType.DELETE) {
-                updateVersion(stmt, curTx, otherTx);
-            }
-        }
-        TableTool.viewToTable(newestView());
-        ArrayList<Object> finalState = TableTool.getFinalStateAsList();
-        TxnPairResult result = new TxnPairResult();
-        result.setOrder(oracleOrder);
-        result.setFinalState(finalState);
-        result.setDeadBlock(isDeadlock);
-        return result;
     }
 
     boolean isSnapshotPoint(StatementCell stmt) {
@@ -453,12 +340,14 @@ public class TrocChecker {
     }
 
     View buildTxView(Transaction curTx, Transaction otherTx, boolean useDel) {
+        // 可读事务包括事务0及当前事务
         ArrayList<Transaction> readTxs = new ArrayList<>(Arrays.asList(TableTool.txInit, curTx));
         if (otherTx.committed) {
             readTxs.add(otherTx);
         }
         View view = new View(useDel);
         for (int rowId : vData.keySet()) {
+            // 每一行的多个版本
             ArrayList<Version> versions = vData.get(rowId);
             for (int i = versions.size() - 1; i >= 0; i--) {
                 Version version = versions.get(i);
@@ -469,6 +358,7 @@ public class TrocChecker {
                             view.deleted.put(rowId, false);
                         }
                     } else if (curTx.snapView.data.containsKey(rowId) && version.tx != curTx && useDel) {
+                        // 如果被其他事务删除了，就读取当前事务快照过的版本
                         view.data.put(rowId, curTx.snapView.data.get(rowId));
                         view.deleted.put(rowId, true);
                     }
@@ -480,20 +370,22 @@ public class TrocChecker {
     }
 
     void updateVersion(StatementCell stmt, Transaction curTx, Transaction otherTx) {
+        // curview表示已提交的数据
+        // 当成功执行到这里时，一定不存在冲突/冲突事务已提交，此处buildTxView和newView效果一样了。
         View curView = buildTxView(curTx, otherTx, false);
         View allView = curView;
         if (curTx.isolationlevel == IsolationLevel.REPEATABLE_READ) {
-            // 对于update语句，只能看到提交后的数据
+            // 可重复读下，事务1删除过的数据事务2可以再次删除
             allView = buildTxView(curTx, otherTx, true);
         }
-        // 获取影响行数的时候不能包含已删除的行
+        // 获取影响行数的时候需要包含已删除的行
         HashSet<Integer> rowIds = getAffectedRows(stmt, allView);
         String snapshotName = "update_version";
         TableTool.takeSnapshotForTable(snapshotName);
         TableTool.viewToTable(curView);
         boolean success = TableTool.executeOnTable(stmt.statement);
         int newRowId = TableTool.fillOneRowId();
-        View newView = TableTool.tableToView();
+        View newView = TableTool.tableToView(); // 这是修改之后的数据
         if (success) {
             if (stmt.type == StatementType.INSERT) {
                 assert newRowId > 0;
@@ -523,6 +415,7 @@ public class TrocChecker {
     }
 
     HashSet<Integer> getAffectedRows(StatementCell stmt, View view) {
+        // 这个函数需要改成约束求解的形式
         HashSet<Integer> res = new HashSet<>();
         String snapshotName = "affected_rows";
         TableTool.takeSnapshotForTable(snapshotName);
@@ -565,6 +458,7 @@ public class TrocChecker {
     }
 
     ArrayList<Object> queryOnView(StatementCell stmt, View view) {
+        // 这个函数需要改成约束求解的方式
         TableTool.backupCurTable();
         TableTool.viewToTable(view);
         ArrayList<Object> res = TableTool.getQueryResultAsList(stmt.statement);
