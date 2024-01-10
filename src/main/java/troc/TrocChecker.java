@@ -196,10 +196,14 @@ public class TrocChecker {
             }
             return false;
         }
-        // 读未提交下，SELECT_SHARE和SELECT_UPDATE直接获取最新的数据, 理论上SELECT也应该直接获取最新数据？
-        stmt.view = newView();
+        // stmt.view仅用于锁分析，对于需要加锁的语句来说都是当前读，例外是RC, RR下的update语句是半一致性读
+        if(curTx.isolationlevel == IsolationLevel.READ_UNCOMMITTED || curTx.isolationlevel == IsolationLevel.READ_COMMITTED){
+            // 半一致性读，读取到的是最新的提交数据
+            stmt.view = buildTxView(curTx, otherTx, false);
+        }else{
+            stmt.view = newestView();
+        }
         log.info("stmt {}, view: {}", stmt, stmt.view);
-
         // 锁分析
         Lock lock = TableTool.getLock(stmt);
         log.info("lock: {}", lock.type);
@@ -249,15 +253,15 @@ public class TrocChecker {
                 view = snapshotView(curTx);
             } else if (curTx.isolationlevel == IsolationLevel.READ_UNCOMMITTED) {
                 // 读最新数据
-                view = newView();
+                view = newestView();
             } else {
                 // 读已提交数据
                 view = buildTxView(curTx, otherTx, false);
             }
             stmt.result = queryOnView(stmt, view);
         } else if (stmt.type == StatementType.SELECT_SHARE || stmt.type == StatementType.SELECT_UPDATE) {
-            // 如果没有阻塞，就应该读最新版本数据
-            view = newView();
+            // 任何隔离级别下都应该读最新数据
+            view = newestView();
             stmt.result = queryOnView(stmt, view);
         } else if (stmt.type == StatementType.UPDATE || stmt.type == StatementType.INSERT
                 || stmt.type == StatementType.DELETE) {
@@ -305,6 +309,28 @@ public class TrocChecker {
         return view;
     }
 
+    View newestView(Transaction curTx, boolean useDel) {
+        View view = new View(useDel);
+        for (int rowid : vData.keySet()) {
+            ArrayList<Version> versions = vData.get(rowid);
+            if (versions == null || versions.isEmpty()) {
+                continue;
+            }
+            Version latest = versions.get(versions.size() - 1);
+            if (!latest.deleted) {
+                view.data.put(rowid, latest.data);
+                if(useDel){
+                    view.deleted.put(rowid, false);
+                }
+            } else if (curTx.snapView.data.containsKey(rowid) && latest.tx != curTx && useDel) {
+                // 如果被其他事务删除了，就读取当前事务快照过的版本
+                view.data.put(rowid, curTx.snapView.data.get(rowid));
+                view.deleted.put(rowid, true);
+            }
+        }
+        return view;
+    }
+
     View snapshotView(Transaction curTx) {
         View view = new View();
         for (int rowId : vData.keySet()) {
@@ -317,23 +343,6 @@ public class TrocChecker {
                     }
                     break;
                 }
-            }
-        }
-        return view;
-    }
-
-    // 和newestView逻辑一样
-    View newView() {
-        View view = new View();
-        for (int rowId : vData.keySet()) {
-            ArrayList<Version> versions = vData.get(rowId);
-            // 这个地方会偶然性地报数组越界
-            if (versions == null || versions.isEmpty()) {
-                continue;
-            }
-            Version version = versions.get(versions.size() - 1);
-            if (!version.deleted) {
-                view.data.put(rowId, version.data);
             }
         }
         return view;
@@ -372,11 +381,11 @@ public class TrocChecker {
     void updateVersion(StatementCell stmt, Transaction curTx, Transaction otherTx) {
         // curview表示已提交的数据
         // 当成功执行到这里时，一定不存在冲突/冲突事务已提交，此处buildTxView和newView效果一样了。
-        View curView = buildTxView(curTx, otherTx, false);
+        View curView = newestView();
         View allView = curView;
         if (curTx.isolationlevel == IsolationLevel.REPEATABLE_READ) {
-            // 可重复读下，事务1删除过的数据事务2可以再次删除
-            allView = buildTxView(curTx, otherTx, true);
+            // 可重复读下，事务1删除过的数据事务2可以再次删除/修改
+            allView = newestView(curTx, true);
         }
         // 获取影响行数的时候需要包含已删除的行
         HashSet<Integer> rowIds = getAffectedRows(stmt, allView);
