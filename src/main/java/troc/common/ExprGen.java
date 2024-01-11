@@ -13,5 +13,5 @@ public abstract class ExprGen {
         this.columns = columns;
     }
 
-    public abstract String genPredicate();
+    public abstract Object genPredicate();
 }

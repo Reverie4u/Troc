@@ -13,7 +13,7 @@ public class MySQLTable extends Table {
 
     public MySQLTable(String tableName) {
         super(tableName);
-        this.exprGenerator = new MySQLExprGen();
+        this.exprGenerator = new MySQLExpressionGenerator();
     }
 
     @Override

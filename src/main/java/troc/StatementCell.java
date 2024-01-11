@@ -9,6 +9,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import lombok.extern.slf4j.Slf4j;
+import troc.mysql.ast.MySQLExpression;
 
 enum StatementType {
     UNKNOWN,
@@ -33,6 +34,7 @@ public class StatementCell {
     ArrayList<Object> result;
     int newRowId;
     String exceptionMessage = "";
+    MySQLExpression predicate;
 
     public StatementCell(Transaction tx, int statementId) {
         this.tx = tx;
@@ -45,6 +47,15 @@ public class StatementCell {
         this.statement = statement.replace(";", "");
         this.type = StatementType.valueOf(this.statement.split(" ")[0]);
         this.parseStatement();
+    }
+
+    public StatementCell(Transaction tx, int statementId, String statement, MySQLExpression predicate) {
+        this.tx = tx;
+        this.statementId = statementId;
+        this.statement = statement.replace(";", "");
+        this.type = StatementType.valueOf(this.statement.split(" ")[0]);
+        this.parseStatement();
+        this.predicate = predicate;
     }
 
     private void parseStatement() {
@@ -234,5 +245,9 @@ public class StatementCell {
         copy.blocked = false;
         copy.result = null;
         return copy;
+    }
+
+    public String getStatement() {
+        return statement;
     }
 }

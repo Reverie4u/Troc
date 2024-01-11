@@ -895,7 +895,7 @@ public class TableTool {
             statement.execute(query);
             statement.close();
         } catch (SQLException e) {
-            // log.info("===Check Syntax Error: {}-{}", query, e.getMessage());
+            log.info("===Check Syntax Error: {}-{}", query, e.getMessage());
             return false;
         }
         return true;

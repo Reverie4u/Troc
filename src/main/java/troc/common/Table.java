@@ -12,6 +12,8 @@ import troc.SQLConnection;
 import troc.StatementCell;
 import troc.TableTool;
 import troc.Transaction;
+import troc.mysql.ast.MySQLExpression;
+import troc.mysql.visitor.MySQLVisitor;
 
 @Slf4j
 public abstract class Table {
@@ -84,7 +86,7 @@ public abstract class Table {
             if (Randomly.getNextInt(0, 15) == 10) {
                 initSQL = genAddIndexStatement();
             } else {
-                initSQL = genInsertStatement();
+                initSQL = genInsertStatement(new Transaction(0), 0).getStatement();
             }
             initializeStatements.add(initSQL);
             TableTool.executeOnTable(initSQL);
@@ -94,9 +96,8 @@ public abstract class Table {
         log.info("Rowcount: {}", initRowCount);
     }
 
-    public String genSelectStatement() {
-        String predicate = exprGenerator.genPredicate();
-        // 不支持distinct
+    public StatementCell genSelectStatement(Transaction tx, int statementId) {
+        MySQLExpression predicate = (MySQLExpression) exprGenerator.genPredicate();
         List<String> selectedColumns = Randomly.nonEmptySubset(columnNames);
         String postfix = "";
         if (Randomly.getBoolean()) {
@@ -108,11 +109,13 @@ public abstract class Table {
                 }
             }
         }
-        return "SELECT " + String.join(", ", selectedColumns) + " FROM "
-                + tableName + " WHERE " + predicate + postfix;
+        String whereClause = MySQLVisitor.asString(predicate);
+        String stmtText = "SELECT " + String.join(", ", selectedColumns) + " FROM "
+                + tableName + " WHERE " + whereClause + postfix;
+        return new StatementCell(tx, statementId, stmtText, predicate);
     }
 
-    public String genInsertStatement() {
+    public StatementCell genInsertStatement(Transaction tx, int statementId) {
         List<String> insertedCols = Randomly.nonEmptySubset(columnNames);
         for (String colName : columns.keySet()) {
             Column column = columns.get(colName);
@@ -129,24 +132,29 @@ public abstract class Table {
         if (Randomly.getBoolean()) {
             ignore = "IGNORE ";
         }
-        return "INSERT " + ignore + "INTO " + tableName + "(" + String.join(", ", insertedCols)
+        String stmtText = "INSERT " + ignore + "INTO " + tableName + "(" + String.join(", ", insertedCols)
                 + ") VALUES (" + String.join(", ", insertedVals) + ")";
+        return new StatementCell(tx, statementId, stmtText);
 
     }
 
-    public String genUpdateStatement() {
-        String predicate = exprGenerator.genPredicate();
+    public StatementCell genUpdateStatement(Transaction tx, int statementId) {
+        MySQLExpression predicate = (MySQLExpression) exprGenerator.genPredicate();
+        String whereClause = MySQLVisitor.asString(predicate);
         List<String> updatedCols = Randomly.nonEmptySubset(columnNames);
         List<String> setPairs = new ArrayList<>();
         for (String colName : updatedCols) {
             setPairs.add(colName + "=" + columns.get(colName).getRandomVal());
         }
-        return "UPDATE " + tableName + " SET " + String.join(", ", setPairs) + " WHERE " + predicate;
+        String stmtText = "UPDATE " + tableName + " SET " + String.join(", ", setPairs) + " WHERE " + whereClause;
+        return new StatementCell(tx, statementId, stmtText, predicate);
     }
 
-    public String genDeleteStatement() {
-        String predicate = exprGenerator.genPredicate();
-        return "DELETE FROM " + tableName + " WHERE " + predicate;
+    public StatementCell genDeleteStatement(Transaction tx, int statementId) {
+        MySQLExpression predicate = (MySQLExpression) exprGenerator.genPredicate();
+        String whereClause = MySQLVisitor.asString(predicate);
+        String stmtText = "DELETE FROM " + tableName + " WHERE " + whereClause;
+        return new StatementCell(tx, statementId, stmtText, predicate);
     }
 
     public String genAddIndexStatement() {
@@ -192,7 +200,7 @@ public abstract class Table {
         StatementCell cell = new StatementCell(tx, 0, "BEGIN");
         statementList.add(cell);
         for (int i = 1; i <= n; i++) {
-            cell = new StatementCell(tx, i, genStatement());
+            cell = genStatement(tx, i);
             statementList.add(cell);
         }
         String lastStmt = "COMMIT";
@@ -210,30 +218,30 @@ public abstract class Table {
      * 
      * @return
      */
-    public String genStatement() {
-        String statement;
+    public StatementCell genStatement(Transaction tx, int statementId) {
+        StatementCell statementCell;
         // 重复以生成合法的语句
         do {
             while (true) {
                 if (Randomly.getBooleanWithRatherLowProbability()) {
-                    statement = genSelectStatement();
+                    statementCell = genSelectStatement(tx, statementId);
                     break;
                 }
                 if (Randomly.getBooleanWithRatherLowProbability()) {
                     if (Randomly.getBooleanWithRatherLowProbability()) {
-                        statement = genInsertStatement();
+                        statementCell = genInsertStatement(tx, statementId);
                     } else {
-                        statement = genUpdateStatement();
+                        statementCell = genUpdateStatement(tx, statementId);
                     }
                     break;
                 }
                 if (Randomly.getBooleanWithSmallProbability()) {
-                    statement = genDeleteStatement();
+                    statementCell = genDeleteStatement(tx, statementId);
                     break;
                 }
             }
-        } while (!TableTool.checkSyntax(statement));
-        return statement;
+        } while (!TableTool.checkSyntax(statementCell.getStatement()));
+        return statementCell;
     }
 
     @Override

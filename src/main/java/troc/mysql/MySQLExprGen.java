@@ -10,6 +10,7 @@ import troc.common.ExprGen;
 
 public class MySQLExprGen extends ExprGen {
 
+    // 这里改成生成MySQL的表达式，而不直接返回字符串
     @Override
     public String genPredicate() {
         String expr = genExpr(0);
@@ -112,6 +113,7 @@ public class MySQLExprGen extends ExprGen {
 
     public String genCastOp(int depth) {
         String castedExpr = genExpr(depth + 1);
+        // INT有问题，应该是SIGNED或者UNSIGNED
         String castType = Randomly.fromOptions("INT", "FLOAT", "DOUBLE", "CHAR");
         return "CAST((" + castedExpr + ") AS " + castType + ")";
     }

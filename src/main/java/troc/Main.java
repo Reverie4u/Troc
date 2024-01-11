@@ -97,12 +97,10 @@ public class Main {
                     }
                     // 恢复原始table
                     TableTool.recoverOriginalTable();
-                    log.info("Current table(1):\n{}", TableTool.tableToView());
                     // 生成两个事务
                     tx1 = table.genTransaction(1);
                     tx2 = table.genTransaction(2);
                     TableTool.recoverOriginalTable();
-                    log.info("Current table(2):\n{}", TableTool.tableToView());
                     // 手动构建冲突
                     TableTool.makeConflict(tx1, tx2, table);
                     TableTool.bugReport.setTx1(tx1);
