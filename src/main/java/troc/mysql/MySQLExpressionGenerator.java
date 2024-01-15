@@ -104,7 +104,10 @@ public class MySQLExpressionGenerator extends ExprGen {
                 String string = "\"" + TableTool.rand.getString() + "\"";
                 return new MySQLStringConstant(string);
             case DOUBLE:
-                double val = TableTool.rand.getDouble();
+                double val;
+                do {
+                    val = TableTool.rand.getDouble();
+                } while (Double.isInfinite(val) || Double.isNaN(val));
                 return new MySQLDoubleConstant(val);
             default:
                 throw new AssertionError();
@@ -114,13 +117,5 @@ public class MySQLExpressionGenerator extends ExprGen {
     protected MySQLExpression generateColumn() {
         MySQLColumn c = (MySQLColumn) Randomly.fromList(new ArrayList<>(columns.values()));
         return MySQLColumnReference.create(c, null);
-    }
-
-    public MySQLExpression negatePredicate(MySQLExpression predicate) {
-        return new MySQLUnaryPrefixOperation(predicate, MySQLUnaryPrefixOperator.NOT);
-    }
-
-    public MySQLExpression isNull(MySQLExpression expr) {
-        return new MySQLUnaryPostfixOperation(expr, MySQLUnaryPostfixOperation.UnaryPostfixOperator.IS_NULL, false);
     }
 }

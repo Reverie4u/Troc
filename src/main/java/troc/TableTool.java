@@ -390,8 +390,14 @@ public class TableTool {
         do {
             Transaction curTx = Randomly.fromList(Arrays.asList(tx1, tx2));
             Transaction otherTx = (curTx == tx1 ? tx2 : tx1);
-            stmts[0] = randomWriteStmtWithCondition(curTx);
-            stmts[1] = randomStmtWithCondition(otherTx);
+            if (TableTool.isInsertConflict) {
+                stmts[0] = randomWriteStmt(curTx);
+                stmts[1] = randomStmt(otherTx);
+            } else {
+                stmts[0] = randomWriteStmtWithoutInsert(curTx);
+                stmts[1] = randomStmtWithoutInsert(otherTx);
+            }
+
             curIter++;
         } while (stmts[0] != null && stmts[0].type == StatementType.INSERT && stmts[1] != null
                 && stmts[1].type == StatementType.INSERT && curIter < 10);
@@ -404,7 +410,7 @@ public class TableTool {
         return stmts;
     }
 
-    static private StatementCell randomWriteStmtWithCondition(Transaction tx) {
+    static private StatementCell randomWriteStmt(Transaction tx) {
         // 随机选择写语句
         ArrayList<StatementCell> candidates = new ArrayList<>();
         for (StatementCell stmt : tx.statements) {
@@ -419,12 +425,42 @@ public class TableTool {
         return Randomly.fromList(candidates);
     }
 
-    static private StatementCell randomStmtWithCondition(Transaction tx) {
+    static private StatementCell randomWriteStmtWithoutInsert(Transaction tx) {
+        // 随机选择写语句
+        ArrayList<StatementCell> candidates = new ArrayList<>();
+        for (StatementCell stmt : tx.statements) {
+            if (stmt.type == StatementType.UPDATE || stmt.type == StatementType.DELETE) {
+                candidates.add(stmt);
+            }
+        }
+        if (candidates.isEmpty()) {
+            return null;
+        }
+        return Randomly.fromList(candidates);
+    }
+
+    static private StatementCell randomStmt(Transaction tx) {
         // 随机选择读或写语句
         ArrayList<StatementCell> candidates = new ArrayList<>();
         for (StatementCell stmt : tx.statements) {
             if (stmt.type == StatementType.UPDATE || stmt.type == StatementType.DELETE
                     || stmt.type == StatementType.INSERT || stmt.type == StatementType.SELECT
+                    || stmt.type == StatementType.SELECT_SHARE || stmt.type == StatementType.SELECT_UPDATE) {
+                candidates.add(stmt);
+            }
+        }
+        if (candidates.isEmpty()) {
+            return null;
+        }
+        return Randomly.fromList(candidates);
+    }
+
+    static private StatementCell randomStmtWithoutInsert(Transaction tx) {
+        // 随机选择读或写语句
+        ArrayList<StatementCell> candidates = new ArrayList<>();
+        for (StatementCell stmt : tx.statements) {
+            if (stmt.type == StatementType.UPDATE || stmt.type == StatementType.DELETE
+                    || stmt.type == StatementType.SELECT
                     || stmt.type == StatementType.SELECT_SHARE || stmt.type == StatementType.SELECT_UPDATE) {
                 candidates.add(stmt);
             }

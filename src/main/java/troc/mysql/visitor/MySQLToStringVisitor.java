@@ -13,6 +13,7 @@ import troc.mysql.ast.MySQLExpression;
 import troc.mysql.ast.MySQLInOperation;
 import troc.mysql.ast.MySQLStringExpression;
 import troc.mysql.ast.MySQLUnaryPostfixOperation;
+import troc.mysql.ast.MySQLUnaryPrefixOperation;
 
 public class MySQLToStringVisitor extends ToStringVisitor<MySQLExpression> implements MySQLVisitor {
 
@@ -143,6 +144,16 @@ public class MySQLToStringVisitor extends ToStringVisitor<MySQLExpression> imple
         sb.append(") AND (");
         visit(op.getRight());
         sb.append(")");
+    }
+
+    @Override
+    public void visit(MySQLUnaryPrefixOperation op) {
+        sb.append("(");
+        sb.append(op.getOperatorRepresentation());
+        sb.append("(");
+        visit(op.getExpression());
+        sb.append("))");
+
     }
 
 }

@@ -110,6 +110,9 @@ public abstract class Table {
             }
         }
         String whereClause = MySQLVisitor.asString(predicate);
+        if (whereClause.isEmpty()) {
+            whereClause = "TRUE";
+        }
         String stmtText = "SELECT " + String.join(", ", selectedColumns) + " FROM "
                 + tableName + " WHERE " + whereClause + postfix;
         return new StatementCell(tx, statementId, stmtText, predicate);
@@ -141,6 +144,9 @@ public abstract class Table {
     public StatementCell genUpdateStatement(Transaction tx, int statementId) {
         MySQLExpression predicate = (MySQLExpression) exprGenerator.genPredicate();
         String whereClause = MySQLVisitor.asString(predicate);
+        if (whereClause.isEmpty()) {
+            whereClause = "TRUE";
+        }
         List<String> updatedCols = Randomly.nonEmptySubset(columnNames);
         List<String> setPairs = new ArrayList<>();
         for (String colName : updatedCols) {
@@ -153,6 +159,9 @@ public abstract class Table {
     public StatementCell genDeleteStatement(Transaction tx, int statementId) {
         MySQLExpression predicate = (MySQLExpression) exprGenerator.genPredicate();
         String whereClause = MySQLVisitor.asString(predicate);
+        if (whereClause.isEmpty()) {
+            whereClause = "TRUE";
+        }
         String stmtText = "DELETE FROM " + tableName + " WHERE " + whereClause;
         return new StatementCell(tx, statementId, stmtText, predicate);
     }

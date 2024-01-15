@@ -11,6 +11,7 @@ import troc.mysql.ast.MySQLExpression;
 import troc.mysql.ast.MySQLInOperation;
 import troc.mysql.ast.MySQLStringExpression;
 import troc.mysql.ast.MySQLUnaryPostfixOperation;
+import troc.mysql.ast.MySQLUnaryPrefixOperation;
 
 public interface MySQLVisitor {
 
@@ -34,6 +35,8 @@ public interface MySQLVisitor {
 
     void visit(MySQLBetweenOperation op);
 
+    void visit(MySQLUnaryPrefixOperation op);
+
     default void visit(MySQLExpression expr) {
         if (expr instanceof MySQLConstant) {
             visit((MySQLConstant) expr);
@@ -55,6 +58,8 @@ public interface MySQLVisitor {
             visit((MySQLStringExpression) expr);
         } else if (expr instanceof MySQLBetweenOperation) {
             visit((MySQLBetweenOperation) expr);
+        } else if (expr instanceof MySQLUnaryPrefixOperation) {
+            visit((MySQLUnaryPrefixOperation) expr);
         } else {
             throw new AssertionError(expr);
         }

@@ -4,13 +4,12 @@ import troc.Randomly;
 
 public abstract class MySQLConstant implements MySQLExpression {
 
-
     public static class MySQLDoubleConstant extends MySQLConstant {
 
         private final double val;
 
         public MySQLDoubleConstant(double val) {
-            this.val =val;
+            this.val = val;
         }
 
         @Override
@@ -30,15 +29,10 @@ public abstract class MySQLConstant implements MySQLExpression {
             singleQuotes = Randomly.getBoolean();
 
         }
+
         @Override
         public String getTextRepresentation() {
-            StringBuilder sb = new StringBuilder();
-            String quotes = singleQuotes ? "'" : "\"";
-            sb.append(quotes);
-            String text = value.replace(quotes, quotes + quotes).replace("\\", "\\\\");
-            sb.append(text);
-            sb.append(quotes);
-            return sb.toString();
+            return value;
         }
 
     }
@@ -48,7 +42,8 @@ public abstract class MySQLConstant implements MySQLExpression {
         private final long value;
         private final String stringRepresentation;
         private final boolean isSigned;
-        public MySQLIntConstant(long value){
+
+        public MySQLIntConstant(long value) {
             this(value, true);
         }
 
@@ -76,9 +71,10 @@ public abstract class MySQLConstant implements MySQLExpression {
     }
 
     public static class MySQLNullConstant extends MySQLConstant {
-        public MySQLNullConstant(){
+        public MySQLNullConstant() {
 
         }
+
         @Override
         public String getTextRepresentation() {
             return "NULL";
@@ -86,7 +82,6 @@ public abstract class MySQLConstant implements MySQLExpression {
     }
 
     public abstract String getTextRepresentation();
-
 
     @Override
     public String toString() {
