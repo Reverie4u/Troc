@@ -10,6 +10,9 @@ import java.util.regex.Pattern;
 
 import lombok.extern.slf4j.Slf4j;
 import troc.mysql.ast.MySQLExpression;
+import troc.mysql.ast.MySQLUnaryPostfixOperation;
+import troc.mysql.ast.MySQLUnaryPrefixOperation;
+import troc.mysql.ast.MySQLUnaryPrefixOperation.MySQLUnaryPrefixOperator;
 
 enum StatementType {
     UNKNOWN,
@@ -186,8 +189,11 @@ public class StatementCell {
             Object res = rs.getObject(1);
             if (res == null) {
                 this.whereClause = "(" + this.whereClause + ") IS NULL";
+                this.predicate = new MySQLUnaryPostfixOperation(this.predicate,
+                        MySQLUnaryPostfixOperation.UnaryPostfixOperator.IS_NULL, false);
             } else {
                 this.whereClause = "NOT (" + this.whereClause + ")";
+                this.predicate = new MySQLUnaryPrefixOperation(this.predicate, MySQLUnaryPrefixOperator.NOT);
             }
             recomputeStatement();
         } catch (SQLException e) {

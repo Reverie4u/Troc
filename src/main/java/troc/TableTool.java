@@ -16,8 +16,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import lombok.extern.slf4j.Slf4j;
 import troc.common.Table;
+import troc.mysql.ast.MySQLBinaryLogicalOperation;
 import troc.mysql.ast.MySQLConstant;
 import troc.mysql.ast.MySQLConstant.MySQLNullConstant;
+import troc.mysql.ast.MySQLUnaryPostfixOperation;
+import troc.mysql.ast.MySQLUnaryPrefixOperation;
+import troc.mysql.ast.MySQLUnaryPrefixOperation.MySQLUnaryPrefixOperator;
 
 @Slf4j
 public class TableTool {
@@ -337,9 +341,12 @@ public class TableTool {
             Object res = rs.getObject(1);
             if (res == null) {
                 s2.whereClause = "(" + s2.whereClause + ") IS NULL";
+                s2.predicate = new MySQLUnaryPostfixOperation(s2.predicate,
+                        MySQLUnaryPostfixOperation.UnaryPostfixOperator.IS_NULL, false);
             } else {
                 boolean result = (Boolean) res;
                 if (!result) {
+                    s2.predicate = new MySQLUnaryPrefixOperation(s2.predicate, MySQLUnaryPrefixOperator.NOT);
                     s2.whereClause = "NOT (" + s2.whereClause + ")";
                 }
             }
@@ -352,11 +359,14 @@ public class TableTool {
 
     static void makeFullySharedFiltersConflict(StatementCell s1, StatementCell s2, Table table) {
         s2.whereClause = s1.whereClause;
+        s2.predicate = s1.predicate;
         s2.recomputeStatement();
     }
 
     static void makePartiallySharedFiltersConflict(StatementCell s1, StatementCell s2, Table table) {
         s2.whereClause = s1.whereClause + " OR " + s2.whereClause;
+        s2.predicate = new MySQLBinaryLogicalOperation(s1.predicate, s2.predicate,
+                MySQLBinaryLogicalOperation.MySQLBinaryLogicalOperator.OR);
         s2.recomputeStatement();
     }
 
