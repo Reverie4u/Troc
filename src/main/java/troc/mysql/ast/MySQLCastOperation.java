@@ -1,18 +1,20 @@
 package troc.mysql.ast;
 
-import troc.Randomly;
+import java.util.Map;
 
 public class MySQLCastOperation implements MySQLExpression {
-
-    // 和troc不太一样
     private final MySQLExpression expr;
     private final CastType type;
 
     public enum CastType {
-        SIGNED, FLOAT, DOUBLE, CHAR;
+        UNSIGNED, SIGNED;
 
+        // public static CastType getRandom() {
+        // return Randomly.fromOptions(CastType.values());
+        // }
         public static CastType getRandom() {
-            return Randomly.fromOptions(CastType.values());
+            return SIGNED;
+            // return Randomly.fromOptions(CastType.values());
         }
 
     }
@@ -31,8 +33,8 @@ public class MySQLCastOperation implements MySQLExpression {
     }
 
     @Override
-    public MySQLConstant getExpectedValue() {
-        return null;
+    public MySQLConstant getExpectedValue(Map<String, Object> row) {
+        return expr.getExpectedValue(row).castAs(type);
     }
 
 }

@@ -54,7 +54,9 @@ public class StatementCell {
         this.statementId = statementId;
         this.statement = statement.replace(";", "");
         this.type = StatementType.valueOf(this.statement.split(" ")[0]);
+        log.info("before parse: {}", this.statement);
         this.parseStatement();
+        log.info("after parse: {}", this.statement);
         this.predicate = predicate;
     }
 
@@ -244,6 +246,8 @@ public class StatementCell {
         copy.values = values;
         copy.blocked = false;
         copy.result = null;
+        // 共享引用，因为predicate不会再修改了
+        copy.predicate = predicate;
         return copy;
     }
 

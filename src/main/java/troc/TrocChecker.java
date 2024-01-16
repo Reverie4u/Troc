@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import lombok.extern.slf4j.Slf4j;
+import troc.common.IgnoreMeException;
 
 @Slf4j
 public class TrocChecker {
@@ -84,7 +85,16 @@ public class TrocChecker {
         // inferOracleOrderMVCC(scheduleClone(schedule));
         // TxnPairResult mvccResult = obtainOracleResults(mvccSchedule);
         // 2.通过外部MVCC获取的结果
-        TxnPairResult mvccResult = inferOracleMVCC(scheduleClone(schedule));
+        TxnPairResult mvccResult;
+        try {
+            mvccResult = inferOracleMVCC(scheduleClone(schedule));
+        } catch (IgnoreMeException e) {
+            log.info("Ignore: {}", e.getMessage());
+            bugInfo += " -- Ignore: " + e.getMessage();
+            TableTool.skipCase++;
+            return true;
+        }
+
         bugInfo = " -- MVCC Error \n";
         if (TableTool.options.isSetCase()) {
             log.info("Schedule: " + schedule);
@@ -197,10 +207,11 @@ public class TrocChecker {
             return false;
         }
         // stmt.view仅用于锁分析，对于需要加锁的语句来说都是当前读，例外是RC, RR下的update语句是半一致性读
-        if(curTx.isolationlevel == IsolationLevel.READ_UNCOMMITTED || curTx.isolationlevel == IsolationLevel.READ_COMMITTED){
+        if (curTx.isolationlevel == IsolationLevel.READ_UNCOMMITTED
+                || curTx.isolationlevel == IsolationLevel.READ_COMMITTED) {
             // 半一致性读，读取到的是最新的提交数据
             stmt.view = buildTxView(curTx, otherTx, false);
-        }else{
+        } else {
             stmt.view = newestView();
         }
         log.info("stmt {}, view: {}", stmt, stmt.view);
@@ -319,7 +330,7 @@ public class TrocChecker {
             Version latest = versions.get(versions.size() - 1);
             if (!latest.deleted) {
                 view.data.put(rowid, latest.data);
-                if(useDel){
+                if (useDel) {
                     view.deleted.put(rowid, false);
                 }
             } else if (curTx.snapView.data.containsKey(rowid) && latest.tx != curTx && useDel) {

@@ -15,10 +15,8 @@ import troc.mysql.ast.MySQLBinaryOperation;
 import troc.mysql.ast.MySQLBinaryOperation.MySQLBinaryOperator;
 import troc.mysql.ast.MySQLCastOperation;
 import troc.mysql.ast.MySQLColumnReference;
-import troc.mysql.ast.MySQLConstant.MySQLDoubleConstant;
 import troc.mysql.ast.MySQLConstant.MySQLIntConstant;
 import troc.mysql.ast.MySQLConstant.MySQLNullConstant;
-import troc.mysql.ast.MySQLConstant.MySQLStringConstant;
 import troc.mysql.ast.MySQLExpression;
 import troc.mysql.ast.MySQLInOperation;
 import troc.mysql.ast.MySQLUnaryPostfixOperation;
@@ -88,7 +86,8 @@ public class MySQLExpressionGenerator extends ExprGen {
     }
 
     private enum ConstantType {
-        INT, NULL, STRING, DOUBLE;
+        // INT, NULL, STRING, DOUBLE;
+        INT, NULL;
     }
 
     public MySQLExpression generateConstant() {
@@ -100,15 +99,15 @@ public class MySQLExpressionGenerator extends ExprGen {
                 return new MySQLIntConstant(num);
             case NULL:
                 return new MySQLNullConstant();
-            case STRING:
-                String string = "\"" + TableTool.rand.getString() + "\"";
-                return new MySQLStringConstant(string);
-            case DOUBLE:
-                double val;
-                do {
-                    val = TableTool.rand.getDouble();
-                } while (Double.isInfinite(val) || Double.isNaN(val));
-                return new MySQLDoubleConstant(val);
+            // case STRING:
+            // String string = "\"" + TableTool.rand.getString() + "\"";
+            // return new MySQLStringConstant(string);
+            // case DOUBLE:
+            // double val;
+            // do {
+            // val = TableTool.rand.getDouble();
+            // } while (Double.isInfinite(val) || Double.isNaN(val));
+            // return new MySQLDoubleConstant(val);
             default:
                 throw new AssertionError();
         }

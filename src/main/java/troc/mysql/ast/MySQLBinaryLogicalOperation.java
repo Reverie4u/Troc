@@ -1,5 +1,7 @@
 package troc.mysql.ast;
 
+import java.util.Map;
+
 import troc.Randomly;
 
 public class MySQLBinaryLogicalOperation implements MySQLExpression {
@@ -13,19 +15,47 @@ public class MySQLBinaryLogicalOperation implements MySQLExpression {
         AND("AND", "&&") {
             @Override
             public MySQLConstant apply(MySQLConstant left, MySQLConstant right) {
-                return null;
+                if (left.isNull() && right.isNull()) {
+                    return MySQLConstant.createNullConstant();
+                } else if (left.isNull()) {
+                    if (right.asBooleanNotNull()) {
+                        return MySQLConstant.createNullConstant();
+                    } else {
+                        return MySQLConstant.createFalse();
+                    }
+                } else if (right.isNull()) {
+                    if (left.asBooleanNotNull()) {
+                        return MySQLConstant.createNullConstant();
+                    } else {
+                        return MySQLConstant.createFalse();
+                    }
+                } else {
+                    return MySQLConstant.createBoolean(left.asBooleanNotNull() && right.asBooleanNotNull());
+                }
             }
         },
         OR("OR", "||") {
             @Override
             public MySQLConstant apply(MySQLConstant left, MySQLConstant right) {
-                return null;
+                if (!left.isNull() && left.asBooleanNotNull()) {
+                    return MySQLConstant.createTrue();
+                } else if (!right.isNull() && right.asBooleanNotNull()) {
+                    return MySQLConstant.createTrue();
+                } else if (left.isNull() || right.isNull()) {
+                    return MySQLConstant.createNullConstant();
+                } else {
+                    return MySQLConstant.createFalse();
+                }
             }
         },
         XOR("XOR") {
             @Override
             public MySQLConstant apply(MySQLConstant left, MySQLConstant right) {
-                return null;
+                if (left.isNull() || right.isNull()) {
+                    return MySQLConstant.createNullConstant();
+                }
+                boolean xorVal = left.asBooleanNotNull() ^ right.asBooleanNotNull();
+                return MySQLConstant.createBoolean(xorVal);
             }
         };
 
@@ -70,8 +100,13 @@ public class MySQLBinaryLogicalOperation implements MySQLExpression {
     }
 
     @Override
-    public MySQLConstant getExpectedValue() {
-        return null;
+    public MySQLConstant getExpectedValue(Map<String, Object> row) {
+        MySQLConstant leftExpected = left.getExpectedValue(row);
+        MySQLConstant rightExpected = right.getExpectedValue(row);
+        if (left.getExpectedValue(row) == null || right.getExpectedValue(row) == null) {
+            return null;
+        }
+        return op.apply(leftExpected, rightExpected);
     }
 
 }

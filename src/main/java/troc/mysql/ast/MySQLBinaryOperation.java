@@ -1,9 +1,14 @@
 package troc.mysql.ast;
 
+import java.util.Map;
 import java.util.function.BinaryOperator;
 
+import lombok.extern.slf4j.Slf4j;
 import troc.Randomly;
+import troc.common.IgnoreMeException;
+import troc.mysql.ast.MySQLCastOperation.CastType;
 
+@Slf4j
 public class MySQLBinaryOperation implements MySQLExpression {
 
     private final MySQLExpression left;
@@ -36,7 +41,14 @@ public class MySQLBinaryOperation implements MySQLExpression {
 
         private static MySQLConstant applyBitOperation(MySQLConstant left, MySQLConstant right,
                 BinaryOperator<Long> op) {
-            return null;
+            if (left.isNull() || right.isNull()) {
+                return MySQLConstant.createNullConstant();
+            } else {
+                long leftVal = left.castAs(CastType.SIGNED).getInt();
+                long rightVal = right.castAs(CastType.SIGNED).getInt();
+                long value = op.apply(leftVal, rightVal);
+                return MySQLConstant.createUnsignedIntConstant(value);
+            }
         }
 
         MySQLBinaryOperator(String textRepresentation) {
@@ -62,8 +74,34 @@ public class MySQLBinaryOperation implements MySQLExpression {
     }
 
     @Override
-    public MySQLConstant getExpectedValue() {
-        return null;
+    public MySQLConstant getExpectedValue(Map<String, Object> row) {
+        MySQLConstant leftExpected = left.getExpectedValue(row);
+        MySQLConstant rightExpected = right.getExpectedValue(row);
+
+        /* workaround for https://bugs.mysql.com/bug.php?id=95960 */
+        if (leftExpected.isString()) {
+            String text = leftExpected.castAsString();
+            while ((text.startsWith(" ") || text.startsWith("\t")) && text.length() > 0) {
+                text = text.substring(1);
+            }
+            if (text.length() > 0 && (text.startsWith("\n") || text.startsWith("."))) {
+                log.info("IgnoreMeException 2");
+                throw new IgnoreMeException();
+            }
+        }
+
+        if (rightExpected.isString()) {
+            String text = rightExpected.castAsString();
+            while ((text.startsWith(" ") || text.startsWith("\t")) && text.length() > 0) {
+                text = text.substring(1);
+            }
+            if (text.length() > 0 && (text.startsWith("\n") || text.startsWith("."))) {
+                log.info("IgnoreMeException 3");
+                throw new IgnoreMeException();
+            }
+        }
+
+        return op.apply(leftExpected, rightExpected);
     }
 
     public MySQLExpression getLeft() {

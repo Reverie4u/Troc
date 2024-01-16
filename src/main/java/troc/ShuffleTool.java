@@ -13,12 +13,12 @@ public class ShuffleTool {
         int n1 = tx1.statements.size(), n2 = tx2.statements.size();
         ArrayList<ArrayList<StatementCell>> res = new ArrayList<>();
         shuffle(res, new ArrayList<>(), tx1.statements, n1, 0, tx2.statements, n2, 0);
-        log.info("before filter: {}, size: {}", res, res.size());
+        // log.info("before filter: {}, size: {}", res, res.size());
         // 这里添加过滤逻辑
         if (TableTool.isFilterSubmittedOrder) {
             res = filterSubmittedOrder(res, tx1, tx2);
         }
-        log.info("after filter: {}, size:{}", res, res.size());
+        // log.info("after filter: {}, size:{}", res, res.size());
         return res;
     }
 
@@ -88,13 +88,13 @@ public class ShuffleTool {
                 if (stmt.tx.txId == 1) {
                     if (stmt.statementId == 1) {
                         tx1FirstIdx = i;
-                    }else if (stmt.statementId == tx1.statements.size() - 1) {
+                    } else if (stmt.statementId == tx1.statements.size() - 1) {
                         tx1CommitIdx = i;
                     }
                 } else if (stmt.tx.txId == 2) {
                     if (stmt.statementId == 1) {
                         tx2FirstIdx = i;
-                    }else if (stmt.statementId == tx2.statements.size() - 1) {
+                    } else if (stmt.statementId == tx2.statements.size() - 1) {
                         tx2CommitIdx = i;
                     }
                 }

@@ -2,7 +2,6 @@ package troc.mysql;
 
 import java.util.Arrays;
 
-import troc.Randomly;
 import troc.common.DataType;
 
 public enum MySQLDataType implements DataType {
@@ -21,7 +20,9 @@ public enum MySQLDataType implements DataType {
     JSON, ENUM, SET;
 
     public static MySQLDataType getRandomDataType() {
-        return Randomly.fromOptions(INT, FLOAT, DOUBLE, CHAR, VARCHAR, TEXT);
+        // return Randomly.fromOptions(INT, FLOAT, DOUBLE, CHAR, VARCHAR, TEXT);
+        // return Randomly.fromOptions(INT, CHAR, VARCHAR, TEXT);
+        return INT; // 假设所有列都是INT类型
     }
 
     @Override

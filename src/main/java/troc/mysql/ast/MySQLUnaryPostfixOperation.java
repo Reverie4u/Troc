@@ -1,5 +1,7 @@
 package troc.mysql.ast;
 
+import java.util.Map;
+
 public class MySQLUnaryPostfixOperation implements MySQLExpression {
 
     private final MySQLExpression expression;
@@ -33,8 +35,26 @@ public class MySQLUnaryPostfixOperation implements MySQLExpression {
     }
 
     @Override
-    public MySQLConstant getExpectedValue() {
-        return null;
+    public MySQLConstant getExpectedValue(Map<String, Object> row) {
+        boolean val;
+        MySQLConstant expectedValue = expression.getExpectedValue(row);
+        switch (operator) {
+            case IS_NULL:
+                val = expectedValue.isNull();
+                break;
+            case IS_FALSE:
+                val = !expectedValue.isNull() && !expectedValue.asBooleanNotNull();
+                break;
+            case IS_TRUE:
+                val = !expectedValue.isNull() && expectedValue.asBooleanNotNull();
+                break;
+            default:
+                throw new AssertionError(operator);
+        }
+        if (negate) {
+            val = !val;
+        }
+        return MySQLConstant.createIntConstant(val ? 1 : 0);
     }
 
 }

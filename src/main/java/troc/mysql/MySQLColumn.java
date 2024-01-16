@@ -63,4 +63,5 @@ public class MySQLColumn extends Column {
         }
         return sb.toString();
     }
+
 }

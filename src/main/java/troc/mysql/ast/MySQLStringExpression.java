@@ -1,5 +1,7 @@
 package troc.mysql.ast;
 
+import java.util.Map;
+
 public class MySQLStringExpression implements MySQLExpression {
 
     private final String str;
@@ -15,7 +17,7 @@ public class MySQLStringExpression implements MySQLExpression {
     }
 
     @Override
-    public MySQLConstant getExpectedValue() {
+    public MySQLConstant getExpectedValue(Map<String, Object> row) {
         return expectedValue;
     }
 

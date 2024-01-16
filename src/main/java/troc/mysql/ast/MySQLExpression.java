@@ -1,9 +1,12 @@
 package troc.mysql.ast;
 
+import java.util.Map;
+
 public interface MySQLExpression {
 
-    default MySQLConstant getExpectedValue() {
-        throw new AssertionError("PQS not supported for this operator");
+    // 获取一行数据带入表达式的值
+    default MySQLConstant getExpectedValue(Map<String, Object> row) {
+        throw new AssertionError("Not supported for this operator");
     }
 
 }

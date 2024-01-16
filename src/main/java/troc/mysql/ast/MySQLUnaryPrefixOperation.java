@@ -1,10 +1,15 @@
 package troc.mysql.ast;
 
+import java.util.Map;
+
+import lombok.extern.slf4j.Slf4j;
 import troc.Randomly;
 import troc.common.BinaryOperatorNode.Operator;
+import troc.common.IgnoreMeException;
 import troc.common.UnaryOperatorNode;
 import troc.mysql.ast.MySQLUnaryPrefixOperation.MySQLUnaryPrefixOperator;
 
+@Slf4j
 public class MySQLUnaryPrefixOperation extends UnaryOperatorNode<MySQLExpression, MySQLUnaryPrefixOperator>
         implements MySQLExpression {
 
@@ -12,7 +17,7 @@ public class MySQLUnaryPrefixOperation extends UnaryOperatorNode<MySQLExpression
         NOT("!", "NOT") {
             @Override
             public MySQLConstant applyNotNull(MySQLConstant expr) {
-                return null;
+                return MySQLConstant.createIntConstant(expr.asBooleanNotNull() ? 0 : 1);
             }
         },
         PLUS("+") {
@@ -24,7 +29,21 @@ public class MySQLUnaryPrefixOperation extends UnaryOperatorNode<MySQLExpression
         MINUS("-") {
             @Override
             public MySQLConstant applyNotNull(MySQLConstant expr) {
-                return null;
+                if (expr.isString()) {
+                    // TODO: implement floating points
+                    log.info("IgnoreMeException 13");
+                    throw new IgnoreMeException();
+                } else if (expr.isInt()) {
+                    if (!expr.isSigned()) {
+                        // // TODO
+                        // // 在无符号整数前面加负号
+                        // log.info("IgnoreMeException 14");
+                        // throw new IgnoreMeException();
+                    }
+                    return MySQLConstant.createIntConstant(-expr.getInt());
+                } else {
+                    throw new AssertionError(expr);
+                }
             }
         };
 
@@ -51,8 +70,13 @@ public class MySQLUnaryPrefixOperation extends UnaryOperatorNode<MySQLExpression
     }
 
     @Override
-    public MySQLConstant getExpectedValue() {
-        return null;
+    public MySQLConstant getExpectedValue(Map<String, Object> row) {
+        MySQLConstant subExprVal = expr.getExpectedValue(row);
+        if (subExprVal.isNull()) {
+            return MySQLConstant.createNullConstant();
+        } else {
+            return op.applyNotNull(subExprVal);
+        }
     }
 
     @Override

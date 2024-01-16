@@ -16,6 +16,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import lombok.extern.slf4j.Slf4j;
 import troc.common.Table;
+import troc.mysql.ast.MySQLConstant;
+import troc.mysql.ast.MySQLConstant.MySQLNullConstant;
 
 @Slf4j
 public class TableTool {
@@ -50,6 +52,7 @@ public class TableTool {
     static String insertPrefix;
     static int nextRowId;
     static Transaction firstTxnInSerOrder;
+    static public boolean isSetCase = false;
     static public boolean isInsertConflict = false;
     static public String filterConflict = "random";
     static public boolean isFilterSubmittedOrder = false;
@@ -65,6 +68,7 @@ public class TableTool {
         filterConflict = options.getFilterConflict();
         isFilterSubmittedOrder = options.isFilterSubmittedOrder();
         submittedOrderSampleCount = options.getSubmittedOrderSampleCount();
+        isSetCase = options.isSetCase();
         possibleIsolationLevels = new ArrayList<>(
                 Arrays.asList(IsolationLevel.READ_COMMITTED, IsolationLevel.REPEATABLE_READ));
         if (TableTool.dbms == DBMS.MYSQL || TableTool.dbms == DBMS.MARIADB) {
@@ -325,8 +329,9 @@ public class TableTool {
             statement = TableTool.conn.createStatement();
             rs = statement.executeQuery(query);
             boolean match = rs.next();
-            if (!rs.next()) {
+            if (!match) {
                 log.info(TableTool.tableToView().toString());
+                log.info("empty table");
                 return;
             }
             Object res = rs.getObject(1);
@@ -351,7 +356,7 @@ public class TableTool {
     }
 
     static void makePartiallySharedFiltersConflict(StatementCell s1, StatementCell s2, Table table) {
-        s2.whereClause = s1.whereClause + "OR" + s2.whereClause;
+        s2.whereClause = s1.whereClause + " OR " + s2.whereClause;
         s2.recomputeStatement();
     }
 
@@ -528,7 +533,15 @@ public class TableTool {
         // 锁类型为None直接返回
         if (lock.type == LockType.NONE)
             return lock;
-        lock.lockObject = getLockObjectFromStmtView(stmt);
+        if (TableTool.isSetCase) {
+            lock.lockObject = getLockObjectFromStmtView(stmt);
+        } else {
+            LockObject tmp = getLockObjectFromStmtView(stmt);
+            lock.lockObject = getLockObjectByCostraintSolver(stmt);
+            if (!tmp.equals(lock.lockObject)) {
+                log.info("lock object is not equal");
+            }
+        }
         return lock;
     }
 
@@ -540,6 +553,56 @@ public class TableTool {
         TableTool.viewToTable(stmt.view);
         LockObject lockObject = getLockObject(stmt);
         TableTool.recoverTableFromSnapshot(snapshotName);
+        return lockObject;
+    }
+
+    static LockObject getLockObjectByCostraintSolver(StatementCell stmt) {
+        // 感觉这个也需要改成约束求解方式
+        // stmt.view
+        // 获取锁
+        LockObject lockObject = new LockObject();
+        HashSet<Integer> lockedRowIds = new HashSet<>();
+        HashSet<String> lockedKeys = new HashSet<>();
+        if (stmt.type == StatementType.INSERT) {
+            // 如果是insert语句，那么锁住insert value会插入的所有索引；
+            lockedKeys = getIndexObjs(stmt.values);
+        } else {
+            HashSet<String> indexObjs = new HashSet<>();
+            // 构造map
+            for (int rowId : stmt.view.data.keySet()) {
+                Object[] row = stmt.view.data.get(rowId);
+                HashMap<String, Object> tupleMap = new HashMap<>();
+                HashMap<String, String> rowValues = new HashMap<>();
+                for (int i = 0; i < colNames.size(); i++) {
+                    tupleMap.put(colNames.get(i), row[i]);
+                    if (row[i] != null) {
+                        rowValues.put(colNames.get(i), getValueString(row[i], colTypeNames.get(i)));
+                    }
+                }
+                MySQLConstant constant;
+                if (stmt.predicate == null) {
+                    constant = new MySQLNullConstant();
+                } else {
+                    constant = stmt.predicate.getExpectedValue(tupleMap);
+                    log.info("expression: {}", stmt.whereClause);
+                    log.info("tuple: {}", tupleMap);
+                    log.info("constant: {}", constant);
+                }
+                if (!constant.isNull() && constant.asBooleanNotNull()) {
+                    // 加入结果集
+                    lockedRowIds.add(rowId);
+                    indexObjs.addAll(getIndexObjs(rowValues));
+                    if (stmt.type == StatementType.UPDATE) {
+                        // 对于update语句，除了需要锁住查询出的值，还要锁住更新后的值
+                        rowValues.putAll(stmt.values);
+                        indexObjs.addAll(getIndexObjs(rowValues));
+                    }
+                }
+            }
+            lockedKeys.addAll(indexObjs);
+        }
+        lockObject.rowIds = lockedRowIds;
+        lockObject.indexes = lockedKeys;
         return lockObject;
     }
 
@@ -656,6 +719,7 @@ public class TableTool {
         if (val == null)
             return "NULL";
         switch (type.toUpperCase()) {
+            case "INT":
             case "INTEGER":
             case "INT4":
                 return Integer.toString((int) val);
