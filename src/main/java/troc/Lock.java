@@ -45,8 +45,9 @@ public class Lock {
 
     private boolean useRangeLock(StatementCell stmt) {
         if (TableTool.dbms == DBMS.MYSQL || TableTool.dbms == DBMS.MARIADB)
-            return stmt.tx.isolationlevel == IsolationLevel.REPEATABLE_READ
-                    || stmt.tx.isolationlevel == IsolationLevel.SERIALIZABLE;
+            return (stmt.tx.isolationlevel == IsolationLevel.REPEATABLE_READ
+                    || stmt.tx.isolationlevel == IsolationLevel.SERIALIZABLE)
+                    && (TableTool.isSetCase || TableTool.oracle.equals("MT"));
         return false;
     }
 

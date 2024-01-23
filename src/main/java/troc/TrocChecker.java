@@ -6,10 +6,13 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import lombok.extern.slf4j.Slf4j;
 import troc.common.IgnoreMeException;
+import troc.mysql.ast.MySQLConstant;
+import troc.mysql.ast.MySQLConstant.MySQLNullConstant;
 
 @Slf4j
 public class TrocChecker {
@@ -389,7 +392,7 @@ public class TrocChecker {
         return view;
     }
 
-    void updateVersion(StatementCell stmt, Transaction curTx, Transaction otherTx) {
+    void updateVersionByExecOnTable(StatementCell stmt, Transaction curTx, Transaction otherTx) {
         // curview表示已提交的数据
         // 当成功执行到这里时，一定不存在冲突/冲突事务已提交，此处buildTxView和newView效果一样了。
         View curView = newestView();
@@ -432,6 +435,86 @@ public class TrocChecker {
             }
         }
         TableTool.recoverTableFromSnapshot(snapshotName);
+    }
+
+    void updateVersion(StatementCell stmt, Transaction curTx, Transaction otherTx) {
+        if (TableTool.isSetCase || TableTool.oracle.equals("MT")) {
+            log.info("Update version use MT oracle"); // 使用变形测试
+            updateVersionByExecOnTable(stmt, curTx, otherTx);
+        } else {
+            log.info("Update version use CS oracle"); // 使用约束求解预言机
+            updateVersionByCostraintSolver(stmt, curTx, otherTx);
+        }
+    }
+
+    void updateVersionByCostraintSolver(StatementCell stmt, Transaction curTx, Transaction otherTx) {
+        // curview表示已提交的数据
+        // 当成功执行到这里时，一定不存在冲突/冲突事务已提交，此处buildTxView和newView效果一样了。
+        View curView = newestView();
+        View allView = curView;
+        if (curTx.isolationlevel == IsolationLevel.REPEATABLE_READ) {
+            // 可重复读下，事务1删除过的数据事务2可以再次删除/修改
+            allView = newestView(curTx, true);
+        }
+        // 根据类型来判断是插入/删除/修改
+        if (stmt.type == StatementType.INSERT) {
+            // 如果是插入语句，则需要获取新插入的行号，在多版本链中新增记录
+            int newRowId = TableTool.getNewRowId();
+            stmt.newRowId = newRowId;
+            if (!vData.containsKey(newRowId)) {
+                vData.put(newRowId, new ArrayList<>());
+            }
+            // 根据insertMap构造行数据
+            Object[] newRow = new Object[TableTool.colNames.size()];
+            for (int i = 0; i < TableTool.colNames.size(); i++) {
+                String value = stmt.insertMap.get(TableTool.colNames.get(i));
+                // 将String类型的value转化成对应类型。
+                newRow[i] = TableTool.convertStringToType(value, TableTool.colTypeNames.get(i));
+            }
+            vData.get(newRowId).add(new Version(newRow, curTx, false));
+        } else if (stmt.type == StatementType.UPDATE || stmt.type == StatementType.DELETE) {
+            // 根据allView获取受影响的行
+            Set<Integer> rowIds = new HashSet<>();
+            for (int rowId : allView.data.keySet()) {
+                Object[] row = allView.data.get(rowId);
+                HashMap<String, Object> tupleMap = new HashMap<>();
+                for (int i = 0; i < TableTool.colNames.size(); i++) {
+                    tupleMap.put(TableTool.colNames.get(i), row[i]);
+                }
+                MySQLConstant constant;
+                if (stmt.predicate == null) {
+                    constant = new MySQLNullConstant();
+                } else {
+                    constant = stmt.predicate.getExpectedValue(tupleMap);
+                    log.info("expression: {}", stmt.whereClause);
+                    log.info("tuple: {}", tupleMap);
+                    log.info("constant: {}", constant);
+                }
+                if (!constant.isNull() && constant.asBooleanNotNull()) {
+                    // 加入结果集
+                    rowIds.add(rowId);
+                }
+            }
+            for (int rowId : rowIds) {
+                boolean deleted = stmt.type == StatementType.DELETE;
+                // 当前行最新数据
+                Object[] data = allView.data.get(rowId);
+                if (deleted) {
+                    vData.get(rowId).add(new Version(data.clone(), curTx, true));
+                } else {
+                    // 对data进行复制,修改
+                    Object[] newData = data.clone();
+                    for (int i = 0; i < TableTool.colNames.size(); i++) {
+                        String colName = TableTool.colNames.get(i);
+                        if (stmt.setMap.containsKey(colName)) {
+                            String value = stmt.setMap.get(colName);
+                            newData[i] = TableTool.convertStringToType(value, TableTool.colTypeNames.get(i));
+                        }
+                    }
+                    vData.get(rowId).add(new Version(newData, curTx, false));
+                }
+            }
+        }
     }
 
     HashSet<Integer> getAffectedRows(StatementCell stmt, View view) {
@@ -478,11 +561,52 @@ public class TrocChecker {
     }
 
     ArrayList<Object> queryOnView(StatementCell stmt, View view) {
-        // 这个函数需要改成约束求解的方式
+        if (TableTool.isSetCase || TableTool.oracle.equals("MT")) {
+            log.info("Query on view use MT oracle"); // 使用变形测试
+            return queryOnViewByExecOnTable(stmt, view);
+        } else {
+            ArrayList<Object> tmp = queryOnViewByExecOnTable(stmt, view);
+            ArrayList<Object> res = queryOnViewByCostraintSolver(stmt, view);
+            log.info("Query on view use CS oracle"); // 使用约束求解预言机
+            if (!tmp.toString().equals(res.toString())) {
+                log.info("Query on view is not equal");
+            }
+            return res;
+        }
+    }
+
+    ArrayList<Object> queryOnViewByExecOnTable(StatementCell stmt, View view) {
         TableTool.backupCurTable();
         TableTool.viewToTable(view);
         ArrayList<Object> res = TableTool.getQueryResultAsList(stmt.statement);
         TableTool.recoverCurTable();
+        return res;
+    }
+
+    ArrayList<Object> queryOnViewByCostraintSolver(StatementCell stmt, View view) {
+        ArrayList<Object> res = new ArrayList<>();
+        for (int rowId : view.data.keySet()) {
+            Object[] row = view.data.get(rowId);
+            HashMap<String, Object> tupleMap = new HashMap<>();
+            for (int i = 0; i < TableTool.colNames.size(); i++) {
+                tupleMap.put(TableTool.colNames.get(i), row[i]);
+            }
+            MySQLConstant constant;
+            if (stmt.predicate == null) {
+                constant = new MySQLNullConstant();
+            } else {
+                constant = stmt.predicate.getExpectedValue(tupleMap);
+                log.info("expression: {}", stmt.whereClause);
+                log.info("tuple: {}", tupleMap);
+                log.info("constant: {}", constant);
+            }
+            if (!constant.isNull() && constant.asBooleanNotNull()) {
+                // 加入结果集
+                for (String columnName : stmt.selectedColumns) {
+                    res.add(tupleMap.get(columnName));
+                }
+            }
+        }
         return res;
     }
 

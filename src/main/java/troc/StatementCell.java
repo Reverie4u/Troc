@@ -5,6 +5,8 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -38,6 +40,9 @@ public class StatementCell {
     int newRowId;
     String exceptionMessage = "";
     MySQLExpression predicate;
+    List<String> selectedColumns;
+    Map<String, String> setMap;
+    Map<String, String> insertMap;
 
     public StatementCell(Transaction tx, int statementId) {
         this.tx = tx;
@@ -52,7 +57,37 @@ public class StatementCell {
         this.parseStatement();
     }
 
+    public StatementCell(Transaction tx, int statementId, String statement, Map<String, String> insertMap) {
+        this.tx = tx;
+        this.statementId = statementId;
+        this.statement = statement.replace(";", "");
+        this.type = StatementType.valueOf(this.statement.split(" ")[0]);
+        this.parseStatement();
+        this.insertMap = insertMap;
+    }
+
+    public StatementCell(Transaction tx, int statementId, String statement, MySQLExpression predicate,
+            Map<String, String> setMap) {
+        this.tx = tx;
+        this.statementId = statementId;
+        this.statement = statement.replace(";", "");
+        this.type = StatementType.valueOf(this.statement.split(" ")[0]);
+        this.parseStatement();
+        this.predicate = predicate;
+        this.setMap = setMap;
+    }
+
     public StatementCell(Transaction tx, int statementId, String statement, MySQLExpression predicate) {
+        this.tx = tx;
+        this.statementId = statementId;
+        this.statement = statement.replace(";", "");
+        this.type = StatementType.valueOf(this.statement.split(" ")[0]);
+        this.parseStatement();
+        this.predicate = predicate;
+    }
+
+    public StatementCell(Transaction tx, int statementId, String statement, MySQLExpression predicate,
+            List<String> selectedColumns) {
         this.tx = tx;
         this.statementId = statementId;
         this.statement = statement.replace(";", "");
@@ -61,6 +96,7 @@ public class StatementCell {
         this.parseStatement();
         log.info("after parse: {}", this.statement);
         this.predicate = predicate;
+        this.selectedColumns = selectedColumns;
     }
 
     private void parseStatement() {

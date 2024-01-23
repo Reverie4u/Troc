@@ -3,6 +3,7 @@ package troc.common;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import lombok.extern.slf4j.Slf4j;
 import troc.DBMS;
@@ -115,7 +116,7 @@ public abstract class Table {
         }
         String stmtText = "SELECT " + String.join(", ", selectedColumns) + " FROM "
                 + tableName + " WHERE " + whereClause + postfix;
-        return new StatementCell(tx, statementId, stmtText, predicate);
+        return new StatementCell(tx, statementId, stmtText, predicate, selectedColumns);
     }
 
     public StatementCell genInsertStatement(Transaction tx, int statementId) {
@@ -126,10 +127,13 @@ public abstract class Table {
                 insertedCols.add(colName);
             }
         }
+        Map<String, String> insertMap = new HashMap<>();
         List<String> insertedVals = new ArrayList<>();
         for (String colName : insertedCols) {
             Column column = columns.get(colName);
-            insertedVals.add(column.getRandomVal());
+            String val = column.getRandomVal();
+            insertedVals.add(val);
+            insertMap.put(colName, val);
         }
         String ignore = "";
         if (Randomly.getBoolean()) {
@@ -137,7 +141,7 @@ public abstract class Table {
         }
         String stmtText = "INSERT " + ignore + "INTO " + tableName + "(" + String.join(", ", insertedCols)
                 + ") VALUES (" + String.join(", ", insertedVals) + ")";
-        return new StatementCell(tx, statementId, stmtText);
+        return new StatementCell(tx, statementId, stmtText, insertMap);
 
     }
 
@@ -149,11 +153,14 @@ public abstract class Table {
         }
         List<String> updatedCols = Randomly.nonEmptySubset(columnNames);
         List<String> setPairs = new ArrayList<>();
+        Map<String, String> setMap = new HashMap<>();
         for (String colName : updatedCols) {
-            setPairs.add(colName + "=" + columns.get(colName).getRandomVal());
+            String val = columns.get(colName).getRandomVal();
+            setPairs.add(colName + "=" + val);
+            setMap.put(colName, val);
         }
         String stmtText = "UPDATE " + tableName + " SET " + String.join(", ", setPairs) + " WHERE " + whereClause;
-        return new StatementCell(tx, statementId, stmtText, predicate);
+        return new StatementCell(tx, statementId, stmtText, predicate, setMap);
     }
 
     public StatementCell genDeleteStatement(Transaction tx, int statementId) {

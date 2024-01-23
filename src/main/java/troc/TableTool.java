@@ -61,6 +61,7 @@ public class TableTool {
     static public String filterConflict = "random";
     static public boolean isFilterSubmittedOrder = false;
     static public int submittedOrderSampleCount = 10;
+    static public String oracle;
 
     static void initialize(Options options) {
         dbms = DBMS.valueOf(options.getDBMS());
@@ -73,6 +74,7 @@ public class TableTool {
         isFilterSubmittedOrder = options.isFilterSubmittedOrder();
         submittedOrderSampleCount = options.getSubmittedOrderSampleCount();
         isSetCase = options.isSetCase();
+        oracle = options.getOracle();
         possibleIsolationLevels = new ArrayList<>(
                 Arrays.asList(IsolationLevel.READ_COMMITTED, IsolationLevel.REPEATABLE_READ));
         if (TableTool.dbms == DBMS.MYSQL || TableTool.dbms == DBMS.MARIADB) {
@@ -543,10 +545,12 @@ public class TableTool {
         // 锁类型为None直接返回
         if (lock.type == LockType.NONE)
             return lock;
-        if (TableTool.isSetCase) {
-            lock.lockObject = getLockObjectFromStmtView(stmt);
+        if (TableTool.isSetCase || TableTool.oracle.equals("MT")) {
+            log.info("Get lock use MT oracle"); // 使用变形测试
+            lock.lockObject = getLockObjectByExecOnTable(stmt);
         } else {
-            LockObject tmp = getLockObjectFromStmtView(stmt);
+            log.info("Get lock use CS oracle"); // 使用约束求解预言机
+            LockObject tmp = getLockObjectByExecOnTable(stmt);
             lock.lockObject = getLockObjectByCostraintSolver(stmt);
             if (!tmp.equals(lock.lockObject)) {
                 log.info("lock object is not equal");
@@ -555,7 +559,7 @@ public class TableTool {
         return lock;
     }
 
-    static LockObject getLockObjectFromStmtView(StatementCell stmt) {
+    static LockObject getLockObjectByExecOnTable(StatementCell stmt) {
         // 感觉这个也需要改成约束求解方式
         String snapshotName = "get_lock";
         TableTool.takeSnapshotForTable(snapshotName);
@@ -752,6 +756,33 @@ public class TableTool {
             case "LONGTEXT":
             default:
                 return "'" + val.toString() + "'";
+        }
+    }
+
+    static Object convertStringToType(String val, String type) {
+        if (val == null)
+            return null;
+        switch (type.toUpperCase()) {
+            case "INT":
+            case "INTEGER":
+            case "INT4":
+                return Integer.parseInt(val);
+            case "FLOAT":
+            case "FLOAT4":
+                return Float.parseFloat(val);
+            case "DOUBLE":
+            case "DECIMAL":
+            case "NUMERIC":
+                return Double.parseDouble(val);
+            case "BLOB":
+                return null;
+            case "CHAR":
+            case "VARCHAR":
+            case "TEXT":
+            case "MEDIUMTEXT":
+            case "LONGTEXT":
+            default:
+                return null;
         }
     }
 
