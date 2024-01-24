@@ -93,24 +93,31 @@ public class MySQLExpressionGenerator extends ExprGen {
     public MySQLExpression generateConstant() {
         ConstantType[] values;
         values = ConstantType.values();
-        switch (Randomly.fromOptions(values)) {
-            case INT:
-                long num = TableTool.rand.getInteger();
-                return new MySQLIntConstant(num);
-            case NULL:
-                return new MySQLNullConstant();
-            // case STRING:
-            // String string = "\"" + TableTool.rand.getString() + "\"";
-            // return new MySQLStringConstant(string);
-            // case DOUBLE:
-            // double val;
-            // do {
-            // val = TableTool.rand.getDouble();
-            // } while (Double.isInfinite(val) || Double.isNaN(val));
-            // return new MySQLDoubleConstant(val);
-            default:
-                throw new AssertionError();
+        // 较大概率生成INT，较小概率（1/10）生成NULL。
+        if (Randomly.getBooleanWithRatherLowProbability()) {
+            return new MySQLNullConstant();
         }
+        long num = TableTool.rand.getInteger();
+        return new MySQLIntConstant(num);
+        // switch (Randomly.fromOptions(values)) {
+        // case INT:
+        // long num = TableTool.rand.getInteger();
+        // return new MySQLIntConstant(num);
+        // case NULL:
+        // return new MySQLNullConstant();
+        // // case STRING:
+        // // String string = "\"" + TableTool.rand.getString() + "\"";
+        // // return new MySQLStringConstant(string);
+        // // case DOUBLE:
+        // // double val;
+        // // do {
+        // // val = TableTool.rand.getDouble();
+        // // } while (Double.isInfinite(val) || Double.isNaN(val));
+        // // return new MySQLDoubleConstant(val);
+        // default:
+        // throw new AssertionError();
+    }
+
     }
 
     protected MySQLExpression generateColumn() {

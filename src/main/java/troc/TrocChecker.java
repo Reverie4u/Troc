@@ -63,8 +63,9 @@ public class TrocChecker {
             }
             // check每一种提交顺序
             oracleCheck(submittedOrder);
-            log.info("txPair:{}, conflictTxPair:{}, allCase:{}, conflictCase:{}",
-                    TableTool.txPair, TableTool.conflictTxPair, TableTool.allCase, TableTool.conflictCase);
+            log.info("txPair:{}, conflictTxPair:{}, allCase:{}, conflictCase:{}, sematicCorrectCase:{}",
+                    TableTool.txPair, TableTool.conflictTxPair, TableTool.allCase, TableTool.conflictCase,
+                    TableTool.sematicCorrectCase);
         }
     }
 
@@ -84,6 +85,26 @@ public class TrocChecker {
         // 1.正常执行的结果
         TxnPairExecutor executor = new TxnPairExecutor(scheduleClone(schedule), tx1, tx2);
         TxnPairResult execResult = executor.getResult();
+        // 遍历actualschedule，判断本次执行是否出现阻塞或死锁
+        boolean hasConflict = false;
+        for (StatementCell stmt : execResult.getOrder()) {
+            if (stmt.blocked) {
+                hasConflict = true;
+                break;
+            }
+        }
+        if (execResult.isDeadBlock()) {
+            hasConflict = true;
+        }
+        if (hasConflict) {
+            TableTool.txPairHasConflict = true;
+            TableTool.conflictCase++;
+        }
+        if (!execResult.isSematicError()) {
+            // 可以用来计算事务语义正确率。
+            TableTool.sematicCorrectCase++;
+        }
+
         // ArrayList<StatementCell> mvccSchedule =
         // inferOracleOrderMVCC(scheduleClone(schedule));
         // TxnPairResult mvccResult = obtainOracleResults(mvccSchedule);
@@ -151,7 +172,6 @@ public class TrocChecker {
         vData = TableTool.initVersionData();
         log.info("init mvcc: {}", vData);
         // 初始状态每一行只有一个版本
-        boolean hasConflict = false;
         for (StatementCell stmt : schedule) {
 
             Transaction curTx = stmt.tx;
@@ -162,7 +182,6 @@ public class TrocChecker {
             }
             boolean blocked = analyzeStmt(stmt, curTx, otherTx);
             if (blocked) {
-                hasConflict = true;
                 StatementCell blockPoint = stmt.copy();
                 blockPoint.blocked = true;
                 oracleOrder.add(blockPoint);
@@ -186,10 +205,6 @@ public class TrocChecker {
                 tx2.clearStates();
                 break;
             }
-        }
-        if (hasConflict) {
-            TableTool.txPairHasConflict = true;
-            TableTool.conflictCase++;
         }
         TableTool.viewToTable(newestView());
         ArrayList<Object> finalState = TableTool.getFinalStateAsList();

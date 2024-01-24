@@ -39,6 +39,7 @@ public class TableTool {
     static public int conflictTxPair = 0;
     static public boolean txPairHasConflict = false;
     static public int allCase = 0;
+    static public int sematicCorrectCase = 0;
     static public int conflictCase = 0;;
     static public int skipCase = 0;
 
