@@ -118,8 +118,6 @@ public class MySQLExpressionGenerator extends ExprGen {
         // throw new AssertionError();
     }
 
-    }
-
     protected MySQLExpression generateColumn() {
         MySQLColumn c = (MySQLColumn) Randomly.fromList(new ArrayList<>(columns.values()));
         return MySQLColumnReference.create(c, null);

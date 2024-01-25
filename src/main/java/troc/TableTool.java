@@ -321,7 +321,7 @@ public class TableTool {
         Object[] row = new Object[ColCount - 1];
         s1.values.forEach((k, v) -> {
             int idx = colNames.indexOf(k);
-            row[idx] = v;
+            row[idx] = convertStringToType(v, colTypeNames.get(idx));
         });
         View view = new View();
         view.data.put(1, row);
