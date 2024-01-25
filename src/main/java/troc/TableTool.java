@@ -328,15 +328,27 @@ public class TableTool {
         // 视图dump到表中
         viewToTable(view);
         String query = null;
-        Statement statement;
-        ResultSet rs;
+        Statement statement = null;
+        ResultSet rs = null;
         try {
-            query = String.format("SELECT %s FROM %s", s2.whereClause, TableTool.TableName);
+            query = String.format("SELECT * FROM %s WHERE (%s)", s2.whereClause, TableTool.TableName, s2.whereClause);
             log.info(query);
             statement = TableTool.conn.createStatement();
             rs = statement.executeQuery(query);
             boolean match = rs.next();
-            if (!match) {
+            statement.close();
+            rs.close();
+            if (match) {
+                // 说明insert row满足where条件
+                return;
+            }
+            query = String.format("SELECT (%s) FROM %s ",
+                    s2.whereClause, TableTool.TableName);
+            statement = TableTool.conn.createStatement();
+            rs = statement.executeQuery(query);
+            if (!rs.next()) {
+                // 为什么会出现没有结果？
+                // 失败是因为当前表中没有数据
                 log.info(TableTool.tableToView().toString());
                 log.info("empty table");
                 return;
@@ -347,13 +359,12 @@ public class TableTool {
                 s2.predicate = new MySQLUnaryPostfixOperation(s2.predicate,
                         MySQLUnaryPostfixOperation.UnaryPostfixOperator.IS_NULL, false);
             } else {
-                boolean result = (Boolean) res;
-                if (!result) {
-                    s2.predicate = new MySQLUnaryPrefixOperation(s2.predicate, MySQLUnaryPrefixOperator.NOT);
-                    s2.whereClause = "NOT (" + s2.whereClause + ")";
-                }
+                s2.predicate = new MySQLUnaryPrefixOperation(s2.predicate, MySQLUnaryPrefixOperator.NOT);
+                s2.whereClause = "NOT (" + s2.whereClause + ")";
             }
             s2.recomputeStatement();
+            statement.close();
+            rs.close();
         } catch (SQLException e) {
             log.info("Execute query failed: {}", query);
             throw new RuntimeException("Execution failed: ", e);
