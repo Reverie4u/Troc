@@ -319,8 +319,9 @@ public class TableTool {
         // s1是INSERT语句
         // 构造视图view
         Object[] row = new Object[ColCount - 1];
-        s1.values.forEach((k, v) -> {
+        s1.insertMap.forEach((k, v) -> {
             int idx = colNames.indexOf(k);
+            log.info("convert to type {}", colTypeNames.get(idx));
             row[idx] = convertStringToType(v, colTypeNames.get(idx));
         });
         View view = new View();
@@ -331,7 +332,7 @@ public class TableTool {
         Statement statement = null;
         ResultSet rs = null;
         try {
-            query = String.format("SELECT * FROM %s WHERE (%s)", s2.whereClause, TableTool.TableName, s2.whereClause);
+            query = String.format("SELECT * FROM %s WHERE (%s)", TableTool.TableName, s2.whereClause);
             log.info(query);
             statement = TableTool.conn.createStatement();
             rs = statement.executeQuery(query);
