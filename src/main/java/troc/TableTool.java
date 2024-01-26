@@ -319,6 +319,8 @@ public class TableTool {
         // s1是INSERT语句
         // 构造视图view
         Object[] row = new Object[ColCount - 1];
+        log.info("insert sql: {}", s1.statement);
+        log.info("other sql: {}", s2.statement);
         s1.insertMap.forEach((k, v) -> {
             int idx = colNames.indexOf(k);
             log.info("convert to type {}", colTypeNames.get(idx));

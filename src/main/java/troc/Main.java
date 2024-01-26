@@ -102,9 +102,13 @@ public class Main {
                     tx2 = table.genTransaction(2);
                     TableTool.recoverOriginalTable();
                     // 手动构建冲突
+                    log.info("Before make conflict------------------------");
+                    log.info("Transaction 1:\n{}", tx1);
+                    log.info("Transaction 2:\n{}", tx2);
                     TableTool.makeConflict(tx1, tx2, table);
                     TableTool.bugReport.setTx1(tx1);
                     TableTool.bugReport.setTx2(tx2);
+                    log.info("After make conflict------------------------");
                     log.info("Transaction 1:\n{}", tx1);
                     log.info("Transaction 2:\n{}", tx2);
                     TrocChecker checker = new TrocChecker(tx1, tx2);
