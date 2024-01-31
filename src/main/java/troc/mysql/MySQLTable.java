@@ -68,7 +68,13 @@ public class MySQLTable extends Table {
                 if (Randomly.getBoolean()) {
                     options = Collections.emptyList();
                 } else {
-                    options = Randomly.nonEmptySubset(allowedOptions, Randomly.smallNumber());
+                    int count;
+                    if (TableTool.dbms.equals(DBMS.TIDB)) {
+                        count = Randomly.getNextInt(0, allowedOptions.size() + 1);
+                    } else {
+                        count = Randomly.smallNumber();
+                    }
+                    options = Randomly.nonEmptySubset(allowedOptions, count);
                 }
             }
             return options;
