@@ -25,6 +25,7 @@ public class MySQLColumn extends Column {
             case MEDIUMINT:
                 return Integer.toString(TableTool.rand.getInteger(-8388608, 8388607));
             case INT:
+                return Integer.toString(TableTool.rand.getInteger(Integer.MIN_VALUE, Integer.MAX_VALUE));
             case BIGINT:
                 return Long.toString(TableTool.rand.getInteger());
             case FLOAT:
