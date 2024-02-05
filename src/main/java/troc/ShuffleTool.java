@@ -15,8 +15,10 @@ public class ShuffleTool {
         shuffle(res, new ArrayList<>(), tx1.statements, n1, 0, tx2.statements, n2, 0);
         // log.info("before filter: {}, size: {}", res, res.size());
         // 这里添加过滤逻辑
+        TableTool.submitOrderCountBeforeFilter += res.size();
         if (TableTool.isFilterSubmittedOrder) {
             res = filterSubmittedOrder(res, tx1, tx2);
+            TableTool.submitOrderCountAfterFilter += res.size();
         }
         // log.info("after filter: {}, size:{}", res, res.size());
         return res;

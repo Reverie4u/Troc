@@ -63,6 +63,8 @@ public class TableTool {
     static public boolean isFilterSubmittedOrder = false;
     static public int submittedOrderSampleCount = 10;
     static public String oracle;
+    static public double submitOrderCountBeforeFilter = 0;
+    static public double submitOrderCountAfterFilter = 0;
 
     static void initialize(Options options) {
         dbms = DBMS.valueOf(options.getDBMS());

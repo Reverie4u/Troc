@@ -114,6 +114,8 @@ public class Main {
                     TrocChecker checker = new TrocChecker(tx1, tx2);
                     // 随机生成提交顺序
                     checker.checkRandom();
+                    log.info("submitOrderCountBeforeFilter:{}, submitOrderCountAfterFilter:{}",
+                            TableTool.submitOrderCountBeforeFilter, TableTool.submitOrderCountAfterFilter);
                     if (TableTool.txPairHasConflict) {
                         TableTool.conflictTxPair++;
                     }
