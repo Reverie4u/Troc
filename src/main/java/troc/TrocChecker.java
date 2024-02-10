@@ -630,6 +630,12 @@ public class TrocChecker {
         ArrayList<StatementCell> execOrder = execRes.getOrder();
         ArrayList<StatementCell> oracleOrder = oracleRes.getOrder();
         int minLen = Math.min(execOrder.size(), oracleOrder.size());
+        if (execRes.isSyntaxError()) {
+            log.info("Ignore: Syntax Error");
+            bugInfo += " -- Ignore: Syntax Error";
+            TableTool.skipCase++;
+            return true;
+        }
         if (execRes.isSematicError()) {
             log.info("Ignore: Sematic Error");
             bugInfo += " -- Ignore: Sematic Error";

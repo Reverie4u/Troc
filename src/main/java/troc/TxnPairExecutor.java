@@ -23,6 +23,7 @@ public class TxnPairExecutor {
 
     private boolean isDeadLock = false;
     private boolean isSematicError = false;
+    private boolean isSyntaxError = false;
     private boolean timeout = false;
     private String exceptionMessage = "";
     private final Map<Integer, Boolean> txnAbort = new HashMap<>();
@@ -36,7 +37,7 @@ public class TxnPairExecutor {
     TxnPairResult getResult() {
         if (result == null) {
             execute();
-            result = new TxnPairResult(actualSchedule, finalState, isDeadLock, isSematicError);
+            result = new TxnPairResult(actualSchedule, finalState, isDeadLock, isSematicError, isSyntaxError);
         }
         return result;
     }
@@ -90,6 +91,11 @@ public class TxnPairExecutor {
         }
 
         private boolean needBreak(String exceptionMessage, int txn, StatementCell statementCell) {
+            if (exceptionMessage.contains("an error in your SQL syntax")) {
+                // 说明本次执行的语句语义错误，直接结束本次测试
+                isSyntaxError = true;
+                return true;
+            }
             if (exceptionMessage.contains("Data truncation")) {
                 // 说明本次执行的语句语义错误，直接结束本次测试
                 isSematicError = true;

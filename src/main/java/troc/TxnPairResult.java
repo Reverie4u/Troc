@@ -7,16 +7,18 @@ public class TxnPairResult {
     private ArrayList<Object> finalState;
     private boolean isDeadBlock;
     private boolean isSematicError;
+    private boolean isSyntaxError;
 
     public TxnPairResult() {
     }
 
     public TxnPairResult(ArrayList<StatementCell> order, ArrayList<Object> finalState, boolean isDeadBlock,
-            boolean isSematicError) {
+            boolean isSematicError, boolean isSyntaxError) {
         this.order = order;
         this.finalState = finalState;
         this.isDeadBlock = isDeadBlock;
         this.isSematicError = isSematicError;
+        this.isSyntaxError = isSyntaxError;
     }
 
     public void setOrder(ArrayList<StatementCell> order) {
@@ -47,8 +49,16 @@ public class TxnPairResult {
         this.isSematicError = isSematicError;
     }
 
+    public void setSyntaxError(boolean isSyntaxError) {
+        this.isSyntaxError = isSyntaxError;
+    }
+
     public boolean isSematicError() {
         return isSematicError;
+    }
+
+    public boolean isSyntaxError() {
+        return isSyntaxError;
     }
 
     @Override
@@ -62,6 +72,7 @@ public class TxnPairResult {
         }
         sb.append("FinalState: ").append(finalState).append("\n");
         sb.append("DeadBlock: ").append(isDeadBlock).append("\n");
+        sb.append("SyntaxError: ").append(isSyntaxError).append("\n");
         sb.append("SematicError: ").append(isSematicError).append("\n");
         return sb.toString();
     }
