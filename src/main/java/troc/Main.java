@@ -6,24 +6,44 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Scanner;
 
-import com.beust.jcommander.JCommander;
+import org.antlr.v4.runtime.CharStreams;
+import org.antlr.v4.runtime.CommonTokenStream;
+import org.antlr.v4.runtime.tree.ParseTree;
 
 import lombok.extern.slf4j.Slf4j;
 import troc.common.Table;
+import troc.mysql.ast.MySQLExpression;
+import troc.mysql.visitor.MySQLExpressionVisitorImpl;
+import troc.mysql.visitor.MySQLVisitor;
 
 @Slf4j
 public class Main {
     public static void main(String[] args) {
-        Options options = new Options();
-        JCommander jCmd = new JCommander();
-        jCmd.addObject(options);
-        jCmd.parse(args);
-        verifyOptions(options);
-        log.info(String.format("Run tests for %s in [DB %s]-[Table %s] on [%s:%d]",
-                options.getDBMS(), options.getDbName(), options.getTableName(), options.getHost(), options.getPort()));
+        // create a CharStream that reads from standard input
+        String input = " b NOT IN (1, CAST(b AS UNSIGNED))";
+        // create a lexer that feeds off of input CharStream
+        MySQLExpressionLexer lexer = new MySQLExpressionLexer(CharStreams.fromString(input));
+        // create a buffer of tokens pulled from the lexer
+        CommonTokenStream tokens = new CommonTokenStream(lexer);
+        // create a parser that feeds off the tokens buffer
+        MySQLExpressionParser parser = new MySQLExpressionParser(tokens);
+        ParseTree tree = parser.expression(); // begin parsing at expression rule
+        MySQLExpressionVisitorImpl visitor = new MySQLExpressionVisitorImpl();
+        MySQLExpression expression = visitor.visit(tree);
+        System.out.println(MySQLVisitor.asString(expression));
+        // System.out.println(tree.toStringTree(parser)); // print LISP-style tree
 
-        txnTesting(options);
-        TableTool.cleanTrocTables();
+        // Options options = new Options();
+        // JCommander jCmd = new JCommander();
+        // jCmd.addObject(options);
+        // jCmd.parse(args);
+        // verifyOptions(options);
+        // log.info(String.format("Run tests for %s in [DB %s]-[Table %s] on [%s:%d]",
+        // options.getDBMS(), options.getDbName(), options.getTableName(),
+        // options.getHost(), options.getPort()));
+
+        // txnTesting(options);
+        // TableTool.cleanTrocTables();
     }
 
     private static void txnTesting(Options options) {
