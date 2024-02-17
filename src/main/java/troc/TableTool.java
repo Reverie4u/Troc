@@ -562,7 +562,7 @@ public class TableTool {
         // 锁类型为None直接返回
         if (lock.type == LockType.NONE)
             return lock;
-        if (TableTool.isSetCase || TableTool.oracle.equals("MT")) {
+        if (TableTool.oracle.equals("MT")) {
             log.info("Get lock use MT oracle"); // 使用变形测试
             lock.lockObject = getLockObjectByExecOnTable(stmt);
         } else {

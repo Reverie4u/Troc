@@ -10,11 +10,16 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.antlr.v4.runtime.CharStreams;
+import org.antlr.v4.runtime.CommonTokenStream;
+import org.antlr.v4.runtime.tree.ParseTree;
+
 import lombok.extern.slf4j.Slf4j;
 import troc.mysql.ast.MySQLExpression;
 import troc.mysql.ast.MySQLUnaryPostfixOperation;
 import troc.mysql.ast.MySQLUnaryPrefixOperation;
 import troc.mysql.ast.MySQLUnaryPrefixOperation.MySQLUnaryPrefixOperator;
+import troc.mysql.visitor.MySQLExpressionVisitorImpl;
 
 enum StatementType {
     UNKNOWN,
@@ -43,6 +48,7 @@ public class StatementCell {
     List<String> selectedColumns;
     Map<String, String> setMap;
     Map<String, String> insertMap;
+    static MySQLExpressionVisitorImpl visitor = new MySQLExpressionVisitorImpl();
 
     public StatementCell(Transaction tx, int statementId) {
         this.tx = tx;
@@ -55,6 +61,61 @@ public class StatementCell {
         this.statement = statement.replace(";", "");
         this.type = StatementType.valueOf(this.statement.split(" ")[0]);
         this.parseStatement();
+        // 还需要解析update set columns
+        if (this.type == StatementType.UPDATE) {
+            this.setMap = new HashMap<>();
+            String[] parts = this.statement.split(" ");
+            int setIdx = -1;
+            for (int i = 0; i < parts.length; i++) {
+                if (parts[i].equals("SET")) {
+                    setIdx = i;
+                    break;
+                }
+            }
+            if (setIdx == -1) {
+                throw new RuntimeException("Invalid update statement: " + this.statement);
+            }
+            int whereIdx = -1;
+            for (int i = setIdx + 1; i < parts.length; i++) {
+                if (parts[i].equals("WHERE")) {
+                    whereIdx = i;
+                    break;
+                }
+            }
+            if (whereIdx == -1) {
+                whereIdx = parts.length;
+            }
+            setMap.put(parts[setIdx + 1], parts[whereIdx - 1]);
+            log.info("Set columns: {}", this.setMap.toString());
+        }
+        // 还需要解析select columns
+        if (this.type == StatementType.SELECT) {
+            this.selectedColumns = new ArrayList<>();
+            String[] parts = this.statement.split(" ");
+            int fromIdx = -1;
+            for (int i = 0; i < parts.length; i++) {
+                if (parts[i].equals("FROM")) {
+                    fromIdx = i;
+                    break;
+                }
+            }
+            if (fromIdx == -1) {
+                throw new RuntimeException("Invalid select statement: " + this.statement);
+            }
+            for (int i = 1; i < fromIdx; i++) {
+                this.selectedColumns.add(parts[i]);
+            }
+            log.info("Selected columns: {}", this.selectedColumns.toString());
+        }
+        if ("CS".equals(TableTool.oracle) && this.whereClause != null && !this.whereClause.isEmpty()) {
+            MySQLExpressionLexer lexer = new MySQLExpressionLexer(CharStreams.fromString(this.whereClause));
+            // create a buffer of tokens pulled from the lexer
+            CommonTokenStream tokens = new CommonTokenStream(lexer);
+            // create a parser that feeds off the tokens buffer
+            MySQLExpressionParser parser = new MySQLExpressionParser(tokens);
+            ParseTree tree = parser.expression(); // begin parsing at expression rule
+            this.predicate = visitor.visit(tree);
+        }
     }
 
     public StatementCell(Transaction tx, int statementId, String statement, Map<String, String> insertMap) {
@@ -290,6 +351,9 @@ public class StatementCell {
         copy.result = null;
         // 共享引用，因为predicate不会再修改了
         copy.predicate = predicate;
+        copy.selectedColumns = selectedColumns;
+        copy.setMap = setMap;
+        copy.insertMap = insertMap;
         return copy;
     }
 

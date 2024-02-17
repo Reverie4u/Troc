@@ -453,7 +453,7 @@ public class TrocChecker {
     }
 
     void updateVersion(StatementCell stmt, Transaction curTx, Transaction otherTx) {
-        if (TableTool.isSetCase || TableTool.oracle.equals("MT")) {
+        if (TableTool.oracle.equals("MT")) {
             log.info("Update version use MT oracle"); // 使用变形测试
             updateVersionByExecOnTable(stmt, curTx, otherTx);
         } else {
@@ -576,7 +576,7 @@ public class TrocChecker {
     }
 
     ArrayList<Object> queryOnView(StatementCell stmt, View view) {
-        if (TableTool.isSetCase || TableTool.oracle.equals("MT")) {
+        if (TableTool.oracle.equals("MT")) {
             log.info("Query on view use MT oracle"); // 使用变形测试
             return queryOnViewByExecOnTable(stmt, view);
         } else {

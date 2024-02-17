@@ -6,6 +6,7 @@ import java.util.stream.Collectors;
 import troc.MySQLExpressionBaseVisitor;
 import troc.MySQLExpressionParser;
 import troc.mysql.MySQLColumn;
+import troc.mysql.MySQLDataType;
 import troc.mysql.ast.MySQLBetweenOperation;
 import troc.mysql.ast.MySQLCastOperation;
 import troc.mysql.ast.MySQLCastOperation.CastType;
@@ -46,8 +47,13 @@ public class MySQLExpressionVisitorImpl extends MySQLExpressionBaseVisitor<MySQL
         } else if (ctx.SIGNED_INTEGER_LITERAL() != null) {
             return new MySQLIntConstant(Long.parseLong(ctx.SIGNED_INTEGER_LITERAL().getText()));
         } else if (ctx.COLUMN_NAME() != null) {
-            MySQLColumn column = new MySQLColumn(null, ctx.COLUMN_NAME().getText(), null, false, false, false, 0);
+            MySQLColumn column = new MySQLColumn(null, ctx.COLUMN_NAME().getText(), MySQLDataType.INT, false, false,
+                    false, 0);
             return new MySQLColumnReference(column, null);
+        } else if (ctx.TRUE_LITERAL() != null) {
+            return new MySQLIntConstant(1);
+        } else if (ctx.FALSE_LITERAL() != null) {
+            return new MySQLIntConstant(0);
         } else {
             throw new UnsupportedOperationException("Unsupported literal: " + ctx.getText());
         }
