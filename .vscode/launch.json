@@ -11,7 +11,7 @@
             "mainClass": "troc.Main",
             // "args": "--dbms mysql --host 127.0.0.1 --port 10003 --username root --password root --filter-submitted-order --filter-conflict none --db test --table t"
             // "args": "--dbms mysql --host 127.0.0.1 --port 10003 --username root --password root --set-case --case-file /home/liuz/fuzz-test/Troc/cases/mysql105670.txt --table t"
-            "args": "--dbms mysql --host 127.0.0.1 --port 10003 --username root --password root  --set-case  --case-file /home/liuz/fuzz-test/Troc/cases/case3.txt --table t"
+            "args": "--dbms mysql --host 127.0.0.1 --port 10003 --username root --password root  --set-case --oracle MT --case-file /home/liuz/fuzz-test/Troc/cases/case3.txt --table t"
             // "args": "--dbms mariadb --host 127.0.0.1 --port 10005 --username root --password root --set-case --case-file /home/liuz/fuzz-test/Troc/target/cases/case1.txt --table t"
             // "args": "--dbms tidb --host 127.0.0.1 --port 4000 --username root --set-case --case-file /home/liuz/fuzz-test/Troc/target/cases/case1.txt --table t"
         }

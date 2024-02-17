@@ -5,4 +5,5 @@ troc.iml
 .classpath
 .factorypath
 .project
-.json
+.vscode/
+*.out
