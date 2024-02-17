@@ -1,0 +1,7 @@
+{
+    "commentTranslate.targetLanguage": "zh-CN",
+    "commentTranslate.source": "DarkCWK.youdao-youdao",
+    "commentTranslate.hover.enabled": false,
+    "java.format.settings.url": "eclipse-formatter.xml",
+    "java.configuration.updateBuildConfiguration": "automatic"
+}
