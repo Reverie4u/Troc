@@ -5,7 +5,8 @@ expression:
 	| LEFT_BRACKET expression RIGHT_BRACKET
 	| expression BETWEEN expression AND expression
 	| expression (NOT)? IN LEFT_BRACKET expressionList RIGHT_BRACKET
-	| CAST LEFT_BRACKET expression AS TYPE RIGHT_BRACKET;
+	| CAST LEFT_BRACKET expression AS TYPE RIGHT_BRACKET
+	| NOT expression;
 	
 expressionList
     :   expression (',' expression)*

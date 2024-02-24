@@ -29,6 +29,15 @@ public class Main {
         // System.out.println(MySQLVisitor.asString(expression));
         // // System.out.println(tree.toStringTree(parser)); // print LISP-style tree
 
+        // 手动构造一个谓词，验证求解结果
+        // MySQLExpression constant1 = new MySQLIntConstant(0);
+        // MySQLExpression constant2 = new MySQLStringConstant("0.5");
+        // MySQLExpression expression = new MySQLBinaryOperation(constant1, constant2,
+        // MySQLBinaryOperator.XOR);
+
+        // // 求解expression
+        // MySQLExpression result = expression.getExpectedValue(null);
+
         Options options = new Options();
         JCommander jCmd = new JCommander();
         jCmd.addObject(options);
