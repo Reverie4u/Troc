@@ -78,6 +78,7 @@ public class TableTool {
     static public String oracle;
     static public double submitOrderCountBeforeFilter = 0;
     static public double submitOrderCountAfterFilter = 0;
+    static public boolean isFilterDuplicateBug = false;
 
     static void initialize(Options options) {
         refMap = new HashMap<>();
@@ -92,6 +93,7 @@ public class TableTool {
         filterConflict = options.getFilterConflict();
         isFilterSubmittedOrder = options.isFilterSubmittedOrder();
         submittedOrderSampleCount = options.getSubmittedOrderSampleCount();
+        isFilterDuplicateBug = options.isFilterDuplicateBug();
         isSetCase = options.isSetCase();
         oracle = options.getOracle();
         if (oracle.equals("DT") || oracle.equals("ALL")) {

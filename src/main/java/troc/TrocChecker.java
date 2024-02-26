@@ -63,7 +63,7 @@ public class TrocChecker {
             }
             // check每一种提交顺序
             boolean res = oracleCheck(submittedOrder);
-            if (!res) {
+            if (TableTool.isFilterDuplicateBug && !res) {
                 // 同一个测试用例检测到的BUG都是一样的，一旦检测到直接停止本轮检测
                 break;
             }

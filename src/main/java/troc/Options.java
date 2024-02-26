@@ -54,4 +54,7 @@ public class Options {
     // could be DT, MT, CS
     @Parameter(names = "--oracle", description = "Specifies the oracle type")
     private String oracle = "MT";
+
+    @Parameter(names = "--filter-duplicate-bug", description = "Whether to enable duplicate bug filtering")
+    private boolean filterDuplicateBug = false;
 }
