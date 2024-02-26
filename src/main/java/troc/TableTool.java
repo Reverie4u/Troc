@@ -11,6 +11,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Scanner;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -42,9 +43,21 @@ public class TableTool {
     static public int sematicCorrectCase = 0;
     static public int conflictCase = 0;;
     static public int skipCase = 0;
-
+    static public int DTbugCase = 0;
+    static public int MTbugCase = 0;
+    static public int CSbugCase = 0;
+    // 差异测试时间（毫秒）
+    static public long DTTime = 0;
+    // 变形测试时间（毫秒）
+    static public long MTTime = 0;
+    // 约束求解时间（毫秒）
+    static public long CSTime = 0;
     static public List<IsolationLevel> possibleIsolationLevels;
     static public SQLConnection conn;
+    static public SQLConnection refConn;
+    static public String refUserName;
+    static public String refPassword;
+    static Map<String, String> refMap;
     static public Options options;
     static public String TableName = "troc"; // 该表名可以由用户指定
     static public String DatabaseName = "test";
@@ -67,20 +80,28 @@ public class TableTool {
     static public double submitOrderCountAfterFilter = 0;
 
     static void initialize(Options options) {
+        refMap = new HashMap<>();
+        refMap.put("MYSQL", "MARIADB");
+        refMap.put("MARIADB", "TIDB");
+        refMap.put("TIDB", "MYSQL");
         dbms = DBMS.valueOf(options.getDBMS());
         TableName = options.getTableName();
         DatabaseName = options.getDbName();
         TableTool.options = options;
-        TableTool.conn = getConnectionFromOptions(options);
         isInsertConflict = options.isInsertConflict();
         filterConflict = options.getFilterConflict();
         isFilterSubmittedOrder = options.isFilterSubmittedOrder();
         submittedOrderSampleCount = options.getSubmittedOrderSampleCount();
         isSetCase = options.isSetCase();
         oracle = options.getOracle();
+        if (oracle.equals("DT") || oracle.equals("ALL")) {
+            TableTool.refConn = getAnotherConnectionFromOptions(options);
+        }
+        TableTool.conn = getConnectionFromOptions(options);
         possibleIsolationLevels = new ArrayList<>(
                 Arrays.asList(IsolationLevel.READ_COMMITTED, IsolationLevel.REPEATABLE_READ));
-        if (TableTool.dbms == DBMS.MYSQL || TableTool.dbms == DBMS.MARIADB) {
+        if (TableTool.dbms == DBMS.MYSQL || TableTool.dbms == DBMS.MARIADB || TableTool.oracle.equals("MT")
+                || TableTool.oracle.equals("CS")) {
             possibleIsolationLevels.add(IsolationLevel.READ_UNCOMMITTED);
             possibleIsolationLevels.add(IsolationLevel.SERIALIZABLE);
         }
@@ -112,6 +133,41 @@ public class TableTool {
         return new SQLConnection(con);
     }
 
+    public static SQLConnection getAnotherConnectionFromOptions(Options options) {
+        String protocol = dbms.getProtocol();
+        String host = "127.0.0.1";
+        int port = 3306;
+        refUserName = "root";
+        String anotherDBMS = refMap.get(options.getDBMS());
+        if (anotherDBMS.equals("MYSQL")) {
+            port = 10003;
+            refPassword = "root";
+        } else if (anotherDBMS.equals("MARIADB")) {
+            port = 10005;
+            refPassword = "root";
+        } else if (anotherDBMS.equals("TIDB")) {
+            port = 4000;
+            refPassword = "root";
+        }
+        Connection con;
+        try {
+            String baseUrl = String.format("jdbc:%s://%s:%d/", protocol, host,
+                    port);
+            String extendUrl = "?user=" + "root" + "&password=" +
+                    refPassword + "&enabledTLSProtocols=TLSv1.2,TLSv1.3";
+            con = DriverManager.getConnection(baseUrl + extendUrl);
+            Statement statement = con.createStatement();
+            statement.execute("DROP DATABASE IF EXISTS " + options.getDbName());
+            statement.execute("CREATE DATABASE " + options.getDbName());
+            statement.close();
+            con.close();
+            con = DriverManager.getConnection(baseUrl + options.getDbName() + extendUrl);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to connect to database: ", e);
+        }
+        return new SQLConnection(con);
+    }
+
     static void prepareTableFromScanner(Scanner input) {
         // 删除掉troc表，如果存在的话
         TableTool.executeOnTable("DROP TABLE IF EXISTS " + TableName);
@@ -130,6 +186,7 @@ public class TableTool {
     static Transaction readTransactionFromScanner(Scanner input, int txId) {
         Transaction tx = new Transaction(txId);
         tx.conn = genConnection();
+        tx.refConn = genAnotherConnection();
         String isolationAlias = input.nextLine();
         tx.isolationlevel = IsolationLevel.getFromAlias(isolationAlias);
         String sql;
@@ -563,15 +620,11 @@ public class TableTool {
         if (lock.type == LockType.NONE)
             return lock;
         if (TableTool.oracle.equals("MT")) {
-            log.info("Get lock use MT oracle"); // 使用变形测试
+            // log.info("Get lock use MT oracle"); // 使用变形测试
             lock.lockObject = getLockObjectByExecOnTable(stmt);
         } else {
-            log.info("Get lock use CS oracle"); // 使用约束求解预言机
-            LockObject tmp = getLockObjectByExecOnTable(stmt);
+            // log.info("Get lock use CS oracle"); // 使用约束求解预言机
             lock.lockObject = getLockObjectByCostraintSolver(stmt);
-            if (!tmp.equals(lock.lockObject)) {
-                log.info("lock object is not equal");
-            }
         }
         return lock;
     }
@@ -615,9 +668,9 @@ public class TableTool {
                     constant = new MySQLNullConstant();
                 } else {
                     constant = stmt.predicate.getExpectedValue(tupleMap);
-                    log.info("expression: {}", stmt.whereClause);
-                    log.info("tuple: {}", tupleMap);
-                    log.info("constant: {}", constant);
+                    // log.info("expression: {}", stmt.whereClause);
+                    // log.info("tuple: {}", tupleMap);
+                    // log.info("constant: {}", constant);
                 }
                 if (!constant.isNull() && constant.asBooleanNotNull()) {
                     // 加入结果集
@@ -648,7 +701,7 @@ public class TableTool {
         } else {
             HashSet<String> indexObjs = new HashSet<>();
             String query = "SELECT * FROM " + TableName + " WHERE " + stmt.whereClause;
-            log.info("getlockObject: {}", query);
+            // log.info("getlockObject: {}", query);
             executeQueryWithCallback(query, rs -> {
                 try {
                     while (rs.next()) {
@@ -839,8 +892,30 @@ public class TableTool {
         recoverTableFromSnapshot(OriginalName);
     }
 
+    // 将tableName的数据备份到newTableName
     static void cloneTable(String tableName, String newTableName) {
         try {
+            if (refConn != null && (TableTool.oracle.equals("ALL") || TableTool.oracle.equals("DT"))) {
+                Statement statement1 = refConn.createStatement();
+                // 根据oracle类型决定
+                statement1.execute(String.format("DROP TABLE IF EXISTS %s", newTableName));
+                statement1.close();
+                statement1 = refConn.createStatement();
+                ResultSet rs1 = statement1.executeQuery(String.format("SHOW CREATE TABLE %s", tableName));
+                rs1.next();
+                String createSQL1 = rs1.getString("Create Table");
+                rs1.close();
+                statement1.close();
+                createSQL1 = createSQL1.replace("\n", "").replace("CREATE TABLE `" + tableName + "`",
+                        "CREATE TABLE `" + newTableName + "`");
+                statement1 = refConn.createStatement();
+                statement1.execute(createSQL1);
+                statement1.close();
+                statement1 = refConn.createStatement();
+                statement1.execute(String.format("INSERT INTO %s SELECT * FROM %s", newTableName, tableName));
+                statement1.close();
+            }
+
             Statement statement = conn.createStatement();
             statement.execute(String.format("DROP TABLE IF EXISTS %s", newTableName));
             statement.close();
@@ -858,6 +933,7 @@ public class TableTool {
             statement = conn.createStatement();
             statement.execute(String.format("INSERT INTO %s SELECT * FROM %s", newTableName, tableName));
             statement.close();
+
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -963,7 +1039,13 @@ public class TableTool {
     }
 
     public static boolean executeOnTable(String sql) {
-        return executeWithConn(conn, sql);
+        boolean res1 = executeWithConn(conn, sql);
+        boolean res2 = true;
+        if (refConn != null && ((TableTool.oracle.equals("ALL") || TableTool.oracle.equals("DT")))) {
+            // 需要在参照数据库上执行
+            res2 = executeWithConn(refConn, sql);
+        }
+        return res1 && res2;
     }
 
     static HashSet<Integer> getRowIdsFromWhere(String whereClause) {
@@ -1006,7 +1088,13 @@ public class TableTool {
         try {
             statement = conn.createStatement();
             ret = statement.executeUpdate(sql);
+            if (refConn != null && (TableTool.oracle.equals("ALL") || TableTool.oracle.equals("DT"))) {
+                Statement statement1 = refConn.createStatement();
+                statement1.executeUpdate(sql);
+                statement1.close();
+            }
             statement.close();
+
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -1036,6 +1124,17 @@ public class TableTool {
         try {
             con = DriverManager.getConnection(conn.getConnectionURL(), options.getUserName(),
                     options.getPassword());
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to connect to database: ", e);
+        }
+        return new SQLConnection(con);
+    }
+
+    public static SQLConnection genAnotherConnection() {
+        Connection con;
+        try {
+            con = DriverManager.getConnection(refConn.getConnectionURL(), refUserName,
+                    refPassword);
         } catch (Exception e) {
             throw new RuntimeException("Failed to connect to database: ", e);
         }

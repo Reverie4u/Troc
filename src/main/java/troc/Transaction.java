@@ -9,6 +9,7 @@ public class Transaction {
     int txId;
     int conflictStmtId;
     SQLConnection conn;
+    SQLConnection refConn;
     IsolationLevel isolationlevel;
     ArrayList<StatementCell> statements;
 
@@ -28,9 +29,10 @@ public class Transaction {
         conflictStmtId = -1;
     }
 
-    public Transaction(int txId, IsolationLevel isolationlevel, SQLConnection conn) {
+    public Transaction(int txId, IsolationLevel isolationlevel, SQLConnection conn, SQLConnection refConn) {
         this(txId);
         this.conn = conn;
+        this.refConn = refConn;
         this.isolationlevel = isolationlevel;
         clearStates();
     }

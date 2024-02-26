@@ -107,7 +107,8 @@ public class StatementCell {
             }
             log.info("Selected columns: {}", this.selectedColumns.toString());
         }
-        if ("CS".equals(TableTool.oracle) && this.whereClause != null && !this.whereClause.isEmpty()) {
+        if (("ALL".equals(TableTool.oracle) || "CS".equals(TableTool.oracle)) && this.whereClause != null
+                && !this.whereClause.isEmpty()) {
             MySQLExpressionLexer lexer = new MySQLExpressionLexer(CharStreams.fromString(this.whereClause));
             // create a buffer of tokens pulled from the lexer
             CommonTokenStream tokens = new CommonTokenStream(lexer);
@@ -276,6 +277,7 @@ public class StatementCell {
             log.info(query);
             statement = TableTool.conn.createStatement();
             rs = statement.executeQuery(query);
+            statement.close();
             if (!rs.next()) {
                 // 为什么会出现没有结果？
                 // 失败是因为当前表中没有数据

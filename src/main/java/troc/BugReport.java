@@ -20,6 +20,7 @@ public class BugReport {
     public String toString() {
         StringBuilder sb = new StringBuilder("=============================");
         sb.append("BUG REPORT\n")
+                .append(" -- Oracle: ").append(TableTool.oracle).append("\n")
                 .append(" -- Create Table SQL: ").append(createTableSQL).append("\n")
                 .append(" -- InitializeStatements:").append("\n");
         for (String stmt : initializeStatements) {

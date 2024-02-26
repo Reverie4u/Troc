@@ -51,6 +51,7 @@ public class Options {
     @Parameter(names = "--submitted-order-sample-count", description = "Sampling count of submission order")
     private int submittedOrderSampleCount = 10;
 
+    // could be DT, MT, CS
     @Parameter(names = "--oracle", description = "Specifies the oracle type")
     private String oracle = "MT";
 }

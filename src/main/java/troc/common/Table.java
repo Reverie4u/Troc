@@ -208,8 +208,14 @@ public abstract class Table {
     }
 
     public Transaction genTransaction(int txId, IsolationLevel isolationLevel) {
+        SQLConnection refConn = null;
+        if (TableTool.oracle.equals("DT") || TableTool.oracle.equals("ALL")) {
+            // 需要启动参照数据库
+            refConn = TableTool.genAnotherConnection();
+            setIsolationLevel(refConn, isolationLevel);
+        }
         SQLConnection txConn = TableTool.genConnection();
-        Transaction tx = new Transaction(txId, isolationLevel, txConn);
+        Transaction tx = new Transaction(txId, isolationLevel, txConn, refConn);
         setIsolationLevel(txConn, isolationLevel);
         int n = Randomly.getNextInt(TableTool.TxSizeMin, TableTool.TxSizeMax);
         ArrayList<StatementCell> statementList = new ArrayList<>();

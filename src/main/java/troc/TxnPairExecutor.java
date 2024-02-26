@@ -27,11 +27,13 @@ public class TxnPairExecutor {
     private boolean timeout = false;
     private String exceptionMessage = "";
     private final Map<Integer, Boolean> txnAbort = new HashMap<>();
+    private boolean ref = false;
 
-    public TxnPairExecutor(ArrayList<StatementCell> schedule, Transaction tx1, Transaction tx2) {
+    public TxnPairExecutor(ArrayList<StatementCell> schedule, Transaction tx1, Transaction tx2, boolean ref) {
         this.submittedOrder = schedule;
         this.tx1 = tx1;
         this.tx2 = tx2;
+        this.ref = ref;
     }
 
     TxnPairResult getResult() {
@@ -92,11 +94,11 @@ public class TxnPairExecutor {
 
         private boolean needBreak(String exceptionMessage, int txn, StatementCell statementCell) {
             if (exceptionMessage.contains("an error in your SQL syntax")) {
-                // 说明本次执行的语句语义错误，直接结束本次测试
+                // 说明本次执行的语句语法错误，直接结束本次测试
                 isSyntaxError = true;
                 return true;
             }
-            if (exceptionMessage.contains("Data truncation")) {
+            if (exceptionMessage.contains("Data truncation") || exceptionMessage.contains("Duplicate entry")) {
                 // 说明本次执行的语句语义错误，直接结束本次测试
                 isSematicError = true;
                 return true;
@@ -136,7 +138,8 @@ public class TxnPairExecutor {
                 int otherTxn = (txn == 1) ? 2 : 1;
                 // 如果当前事务被阻塞，则将当前语句放入阻塞队列中
                 if (txnBlock.get(txn)) { // if a child thread is blocked
-                    log.info("txn {} is blocked, add query {} to blockedStmts", txn, statementCell);
+                    // log.info("txn {} is blocked, add query {} to blockedStmts", txn,
+                    // statementCell);
                     ArrayList<StatementCell> stmts = blockedStmts.get(txn);
                     stmts.add(statementCell);
                     blockedStmts.put(txn, stmts); // save its statements 这里似乎不太必要
@@ -145,7 +148,7 @@ public class TxnPairExecutor {
                 try {
                     // 当前事务未被阻塞，将当前语句放入队列中
                     queues.get(txn).put(statementCell);
-                    log.info("add query {} to queue {}", statementCell, txn);
+                    // log.info("add query {} to queue {}", statementCell, txn);
                 } catch (InterruptedException e) {
                     log.info(" -- MainThread run exception");
                     log.info("Query: " + statementCell.statement);
@@ -160,7 +163,7 @@ public class TxnPairExecutor {
                     log.info("Query: " + statementCell.statement);
                     log.info("Interrupted Exception: " + e.getMessage());
                 }
-                log.info("current query: {}, queryReturn: {}", statementCell, queryReturn);
+                // log.info("current query: {}, queryReturn: {}", statementCell, queryReturn);
                 if (queryReturn == null) {
                     log.info(txn + "-" + statementCell.statementId + ": time out");
                     txnBlock.put(txn, true); // record blocked transaction
@@ -190,7 +193,7 @@ public class TxnPairExecutor {
                             log.info("Interrupted Exception: " + e.getMessage());
                         }
                         ;
-                        log.info("current query: {}, nextReturn: {}", statementCell, nextReturn);
+                        // log.info("current query: {}, nextReturn: {}", statementCell, nextReturn);
                         if (nextReturn == null) {
                             log.info(" -- " + txn + "." + statementCell.statementId + ": time out");
                             timeout = true;
@@ -252,7 +255,8 @@ public class TxnPairExecutor {
                                 log.info("Query: " + statementCell.statement);
                                 log.info("Interrupted Exception: " + e.getMessage());
                             }
-                            log.info("current query: {}, blockedReturn: {}", statementCell, blockedReturn);
+                            // log.info("current query: {}, blockedReturn: {}", statementCell,
+                            // blockedReturn);
                             if (blockedReturn == null) {
                                 log.info(" -- " + txn + "." + statementCell.statementId + ": still time out");
                                 timeout = true;
@@ -280,10 +284,16 @@ public class TxnPairExecutor {
                 }
             }
             // 发生死锁时，跳出for循环
-            if (isDeadLock || isSematicError) {
+            if (isDeadLock || isSematicError || isSyntaxError) {
                 try {
                     tx1.conn.createStatement().executeUpdate("ROLLBACK"); // stop transaction
                     tx2.conn.createStatement().executeUpdate("ROLLBACK");
+                    if (tx1.refConn != null) {
+                        tx1.refConn.createStatement().executeUpdate("ROLLBACK");
+                    }
+                    if (tx2.refConn != null) {
+                        tx2.refConn.createStatement().executeUpdate("ROLLBACK");
+                    }
                 } catch (SQLException e) {
                     log.info(" -- Deadlock Commit Failed");
                 }
@@ -345,11 +355,18 @@ public class TxnPairExecutor {
                     // execute a query
                     String query = stmt.statement;
                     try {
+                        SQLConnection conn = null;
+                        if (ref) {
+                            conn = stmt.tx.refConn;
+                        } else {
+                            conn = stmt.tx.conn;
+                        }
                         if (stmt.type == StatementType.SELECT || stmt.type == StatementType.SELECT_SHARE
                                 || stmt.type == StatementType.SELECT_UPDATE) {
-                            stmt.result = TableTool.getQueryResultAsListWithException(stmt.tx.conn, query);
+
+                            stmt.result = TableTool.getQueryResultAsListWithException(conn, query);
                         } else {
-                            stmt.tx.conn.createStatement().executeUpdate(query);
+                            conn.createStatement().executeUpdate(query);
                         }
                         stmt.exceptionMessage = "";
                     } catch (SQLException e) {
@@ -362,7 +379,7 @@ public class TxnPairExecutor {
                         try {
                             // communicationID是一个阻塞队列，用于两个消费者与生产者进行通信
                             // 线程2在这个地方阻塞，导致一直无法结束
-                            log.info("add result of {} to communicationID", stmt);
+                            // log.info("add result of {} to communicationID", stmt);
                             communicationID.put(stmt); // communicate to main thread
                         } catch (InterruptedException e) { // communicationID.put()
                             log.info(" -- TXNThread threadExec exception");

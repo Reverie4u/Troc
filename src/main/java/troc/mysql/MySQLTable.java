@@ -58,7 +58,7 @@ public class MySQLTable extends Table {
 
         public static List<MySQLTableOptions> getRandomTableOptions() {
             List<MySQLTableOptions> allowedOptions = Arrays.asList(MySQLTableOptions.values());
-            if (TableTool.dbms.equals(DBMS.TIDB)) {
+            if (TableTool.dbms.equals(DBMS.TIDB) || TableTool.oracle.equals("ALL") || TableTool.oracle.equals("DT")) {
                 allowedOptions = Arrays.asList(AUTO_INCREMENT, COMMENT);
             }
             List<MySQLTableOptions> options;
@@ -69,7 +69,8 @@ public class MySQLTable extends Table {
                     options = Collections.emptyList();
                 } else {
                     int count;
-                    if (TableTool.dbms.equals(DBMS.TIDB)) {
+                    if (TableTool.dbms.equals(DBMS.TIDB) || TableTool.oracle.equals("ALL")
+                            || TableTool.oracle.equals("DT")) {
                         count = Randomly.getNextInt(0, allowedOptions.size() + 1);
                     } else {
                         count = Randomly.smallNumber();

@@ -62,10 +62,16 @@ public class TrocChecker {
             } catch (InterruptedException e) {
             }
             // check每一种提交顺序
-            oracleCheck(submittedOrder);
-            log.info("txPair:{}, conflictTxPair:{}, allCase:{}, conflictCase:{}, sematicCorrectCase:{}",
+            boolean res = oracleCheck(submittedOrder);
+            if (!res) {
+                // 同一个测试用例检测到的BUG都是一样的，一旦检测到直接停止本轮检测
+                break;
+            }
+            log.info(
+                    "txPair:{}, conflictTxPair:{}, allCase:{}, conflictCase:{}, sematicCorrectCase:{}, DTTime:{}, CSTime:{}, MTTime:{}, DTbugCase:{}, CSbugCase:{}, MTbugCase:{}",
                     TableTool.txPair, TableTool.conflictTxPair, TableTool.allCase, TableTool.conflictCase,
-                    TableTool.sematicCorrectCase);
+                    TableTool.sematicCorrectCase, TableTool.DTTime, TableTool.CSTime, TableTool.MTTime,
+                    TableTool.DTbugCase, TableTool.CSbugCase, TableTool.MTbugCase);
         }
     }
 
@@ -76,14 +82,127 @@ public class TrocChecker {
         }
     }
 
-    private boolean oracleCheck(ArrayList<StatementCell> schedule) {
+    private boolean oracleCheckByDT(ArrayList<StatementCell> schedule) {
+        String tmp = TableTool.oracle;
+        TableTool.oracle = "DT";
+        log.info("oracle check by DT");
+        // 获取oracleCheck花费时间，秒
+        long start = System.currentTimeMillis();
+        boolean res = oracleCheckInternalDT(schedule);
+        long end = System.currentTimeMillis();
+        TableTool.DTTime += (end - start);
+        // 还原oracle
+        TableTool.oracle = tmp;
+        if (!res) {
+            TableTool.DTbugCase++;
+        }
+        return res;
+    }
+
+    private boolean oracleCheckByCS(ArrayList<StatementCell> schedule) {
+        String tmp = TableTool.oracle;
+        TableTool.oracle = "CS";
+        log.info("oracle check by CS");
+        // 获取oracleCheck花费时间，秒
+        long start = System.currentTimeMillis();
+        boolean res = oracleCheckInternal(schedule);
+        long end = System.currentTimeMillis();
+        TableTool.CSTime += (end - start);
+        // 还原oracle
+        TableTool.oracle = tmp;
+        if (!res) {
+            TableTool.CSbugCase++;
+        }
+        return res;
+    }
+
+    private boolean oracleCheckByMT(ArrayList<StatementCell> schedule) {
+        String tmp = TableTool.oracle;
+        TableTool.oracle = "MT";
+        log.info("oracle check by MT");
+        long start = System.currentTimeMillis();
+        boolean res = oracleCheckInternal(schedule);
+        long end = System.currentTimeMillis();
+        TableTool.MTTime += (end - start);
+        // 还原oracle
+        TableTool.oracle = tmp;
+        if (!res) {
+            TableTool.MTbugCase++;
+        }
+        return res;
+    }
+
+    private boolean oracleCheckInternalDT(ArrayList<StatementCell> schedule) {
+        // 修改语句使用的连接
         TableTool.allCase++;
         log.info("Check new schedule:{}", schedule);
         // 将origin表复制到troc表
         TableTool.recoverOriginalTable();
         bugInfo = "";
         // 1.正常执行的结果
-        TxnPairExecutor executor = new TxnPairExecutor(scheduleClone(schedule), tx1, tx2);
+        TxnPairExecutor executor1 = null;
+        TxnPairResult execResult1 = null;
+
+        executor1 = new TxnPairExecutor(scheduleClone(schedule), tx1, tx2, false);
+        execResult1 = executor1.getResult();
+        // 遍历actualschedule，判断本次执行是否出现阻塞或死锁
+        boolean hasConflict = false;
+        for (StatementCell stmt : execResult1.getOrder()) {
+            if (stmt.blocked) {
+                hasConflict = true;
+                break;
+            }
+        }
+        if (execResult1.isDeadBlock()) {
+            hasConflict = true;
+        }
+        if (hasConflict) {
+            TableTool.txPairHasConflict = true;
+            TableTool.conflictCase++;
+        }
+        if (!execResult1.isSematicError()) {
+            // 可以用来计算事务语义正确率。
+            TableTool.sematicCorrectCase++;
+        }
+
+        // 2.通过参照数据库获取的结果
+        TxnPairExecutor executor2 = new TxnPairExecutor(scheduleClone(schedule), tx1, tx2, true);
+        TxnPairResult execResult2 = executor2.getResult();
+
+        bugInfo = " -- DT Error \n";
+        if (TableTool.options.isSetCase()) {
+            log.info("Schedule: " + schedule);
+            log.info("Input schedule: " + getScheduleInputStr(schedule));
+            log.info("Get execute result: " + execResult1);
+            log.info("DT oracle order: " + execResult2.getOrder());
+            log.info("DT oracle result: " + execResult2);
+            return compareOracles(execResult1, execResult2);
+        }
+        if (compareOracles(execResult1, execResult2)) {
+            // false代表有bug
+            log.info("Schedule: " + schedule);
+            log.info("Input schedule: " + getScheduleInputStr(schedule));
+            log.info("Get execute result: " + execResult1);
+            log.info("DT oracle order: " + execResult2.getOrder());
+            log.info("DT oracle result: " + execResult2);
+            return true;
+        }
+        TableTool.bugReport.setInputSchedule(getScheduleInputStr(schedule));
+        TableTool.bugReport.setSubmittedOrder(schedule.toString());
+        TableTool.bugReport.setExecRes(execResult1);
+        TableTool.bugReport.setInferredRes(execResult2);
+        log.info(TableTool.bugReport.toString());
+        return false;
+    }
+
+    private boolean oracleCheckInternal(ArrayList<StatementCell> schedule) {
+        TableTool.allCase++;
+        log.info("Check new schedule:{}", schedule);
+        // 将origin表复制到troc表
+        TableTool.recoverOriginalTable();
+        bugInfo = "";
+        // 1.正常执行的结果
+        TxnPairExecutor executor = new TxnPairExecutor(scheduleClone(schedule), tx1, tx2, false);
         TxnPairResult execResult = executor.getResult();
         // 遍历actualschedule，判断本次执行是否出现阻塞或死锁
         boolean hasConflict = false;
@@ -129,6 +248,7 @@ public class TrocChecker {
             return compareOracles(execResult, mvccResult);
         }
         if (compareOracles(execResult, mvccResult)) {
+            // false代表有bug
             log.info("Schedule: " + schedule);
             log.info("Input schedule: " + getScheduleInputStr(schedule));
             log.info("Get execute result: " + execResult);
@@ -142,6 +262,24 @@ public class TrocChecker {
         TableTool.bugReport.setInferredRes(mvccResult);
         log.info(TableTool.bugReport.toString());
         return false;
+    }
+
+    private boolean oracleCheck(ArrayList<StatementCell> schedule) {
+        if (TableTool.options.getOracle().equals("DT")) {
+            return oracleCheckByDT(schedule);
+        } else if (TableTool.options.getOracle().equals("CS")) {
+            return oracleCheckByCS(schedule);
+        } else if (TableTool.options.getOracle().equals("MT")) {
+            return oracleCheckByMT(schedule);
+        } else if (TableTool.options.getOracle().equals("ALL")) {
+            // 各输出一次
+            boolean res1 = oracleCheckByDT(schedule);
+            boolean res2 = oracleCheckByCS(schedule);
+            boolean res3 = oracleCheckByMT(schedule);
+            return res1 && res2 && res3;
+        } else {
+            throw new RuntimeException("Unexpected oracle type: " + TableTool.options.getOracle());
+        }
     }
 
     private String getScheduleInputStr(ArrayList<StatementCell> schedule) {
@@ -170,7 +308,7 @@ public class TrocChecker {
         tx1.clearStates();
         tx2.clearStates();
         vData = TableTool.initVersionData();
-        log.info("init mvcc: {}", vData);
+        // log.info("init mvcc: {}", vData);
         // 初始状态每一行只有一个版本
         for (StatementCell stmt : schedule) {
 
@@ -194,11 +332,11 @@ public class TrocChecker {
                     for (StatementCell blockedStmt : otherTx.blockedStatements) {
                         analyzeStmt(blockedStmt, otherTx, curTx);
                         oracleOrder.add(blockedStmt);
-                        log.info("after blockedStmt: {},  mvcc: {}", blockedStmt, vData);
+                        // log.info("after blockedStmt: {}, mvcc: {}", blockedStmt, vData);
                     }
                 }
             }
-            log.info("after stmt: {},  mvcc: {}", stmt, vData);
+            // log.info("after stmt: {}, mvcc: {}", stmt, vData);
             if (curTx.blocked && otherTx.blocked) {
                 isDeadlock = true;
                 tx1.clearStates();
@@ -232,10 +370,10 @@ public class TrocChecker {
         } else {
             stmt.view = newestView();
         }
-        log.info("stmt {}, view: {}", stmt, stmt.view);
+        // log.info("stmt {}, view: {}", stmt, stmt.view);
         // 锁分析
         Lock lock = TableTool.getLock(stmt);
-        log.info("lock: {}", lock.type);
+        // log.info("lock: {}", lock.type);
         if (lock.isConflict(otherTx) && !otherTx.aborted && !otherTx.committed) {
             curTx.blocked = true;
             TableTool.firstTxnInSerOrder = otherTx;
@@ -454,10 +592,10 @@ public class TrocChecker {
 
     void updateVersion(StatementCell stmt, Transaction curTx, Transaction otherTx) {
         if (TableTool.oracle.equals("MT")) {
-            log.info("Update version use MT oracle"); // 使用变形测试
+            // log.info("Update version use MT oracle"); // 使用变形测试
             updateVersionByExecOnTable(stmt, curTx, otherTx);
         } else {
-            log.info("Update version use CS oracle"); // 使用约束求解预言机
+            // log.info("Update version use CS oracle"); // 使用约束求解预言机
             updateVersionByCostraintSolver(stmt, curTx, otherTx);
         }
     }
@@ -501,9 +639,9 @@ public class TrocChecker {
                     constant = new MySQLNullConstant();
                 } else {
                     constant = stmt.predicate.getExpectedValue(tupleMap);
-                    log.info("expression: {}", stmt.whereClause);
-                    log.info("tuple: {}", tupleMap);
-                    log.info("constant: {}", constant);
+                    // log.info("expression: {}", stmt.whereClause);
+                    // log.info("tuple: {}", tupleMap);
+                    // log.info("constant: {}", constant);
                 }
                 if (!constant.isNull() && constant.asBooleanNotNull()) {
                     // 加入结果集
@@ -577,15 +715,11 @@ public class TrocChecker {
 
     ArrayList<Object> queryOnView(StatementCell stmt, View view) {
         if (TableTool.oracle.equals("MT")) {
-            log.info("Query on view use MT oracle"); // 使用变形测试
+            // log.info("Query on view use MT oracle"); // 使用变形测试
             return queryOnViewByExecOnTable(stmt, view);
         } else {
-            ArrayList<Object> tmp = queryOnViewByExecOnTable(stmt, view);
+            // log.info("Query on view use CS oracle"); // 使用约束求解预言机
             ArrayList<Object> res = queryOnViewByCostraintSolver(stmt, view);
-            log.info("Query on view use CS oracle"); // 使用约束求解预言机
-            if (!tmp.toString().equals(res.toString())) {
-                log.info("Query on view is not equal");
-            }
             return res;
         }
     }
@@ -611,9 +745,9 @@ public class TrocChecker {
                 constant = new MySQLNullConstant();
             } else {
                 constant = stmt.predicate.getExpectedValue(tupleMap);
-                log.info("expression: {}", stmt.whereClause);
-                log.info("tuple: {}", tupleMap);
-                log.info("constant: {}", constant);
+                // log.info("expression: {}", stmt.whereClause);
+                // log.info("tuple: {}", tupleMap);
+                // log.info("constant: {}", constant);
             }
             if (!constant.isNull() && constant.asBooleanNotNull()) {
                 // 加入结果集
