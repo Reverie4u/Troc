@@ -6,10 +6,9 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Scanner;
 
-import com.beust.jcommander.JCommander;
-
 import lombok.extern.slf4j.Slf4j;
 import troc.common.Table;
+import troc.reducer.Reducer;
 
 @Slf4j
 public class Main {
@@ -38,17 +37,50 @@ public class Main {
         // // 求解expression
         // MySQLExpression result = expression.getExpectedValue(null);
 
-        Options options = new Options();
-        JCommander jCmd = new JCommander();
-        jCmd.addObject(options);
-        jCmd.parse(args);
-        verifyOptions(options);
-        log.info(String.format("Run tests for %s in [DB %s]-[Table %s] on [%s:%d]",
-                options.getDBMS(), options.getDbName(), options.getTableName(),
-                options.getHost(), options.getPort()));
+        Reducer reducer = new Reducer();
+        String s = "CREATE TABLE t(c0 CHAR(9), c1 TEXT NOT NULL, c2 TEXT NOT NULL, c3 INT PRIMARY KEY) CHECKSUM = 1, MIN_ROWS = 8025480462799352670, MAX_ROWS = 7649209172219367279, STATS_PERSISTENT = DEFAULT, AUTO_INCREMENT = 1180316673726627002\n"
+                + //
+                "INSERT IGNORE INTO t(c3, c1, c2) VALUES (1040804670, \"\", \"470706956\")\n" + //
+                "INSERT INTO t(c0, c1, c2, c3) VALUES (\"6Zpl]\", \"ꪞX*/\", \"-1119299061\", 1825853323)\n" + //
+                "INSERT INTO t(c1, c3, c2) VALUES (\"hw逼Z㶇3ꕓ<\", -686966298, \"0.9227050532104513\")\n" + //
+                "INSERT IGNORE INTO t(c3, c0, c1, c2) VALUES (990209122, \"104080467\", \"rL|\", \"s\")\n" + //
+                "INSERT IGNORE INTO t(c0, c1, c2, c3) VALUES (\"2H轝\", \"1985062227\", \"EDl\", 279293156)\n" + //
+                "INSERT INTO t(c3, c0, c2, c1) VALUES (-827318654, \"\", \"n *蠡R\", \"SjOky9g\")\n" + //
+                "INSERT IGNORE INTO t(c1, c3, c2) VALUES (\"橨w\", 190006852, \"\")\n" + //
+                "INSERT IGNORE INTO t(c0, c1, c3, c2) VALUES (\"\", \"맦oJ\", -242231686, \"\")\n" + //
+                "INSERT INTO t(c1, c3, c2) VALUES (\"Y0v*B摩XV\", -1519129264, \"uO\")\n" + //
+                "\n" + //
+                "RU\n" + //
+                "BEGIN\n" + //
+                "SELECT c3, c0, c1, c2 FROM t WHERE -2.42231686E8\n" + //
+                "SELECT c0, c1, c2 FROM t WHERE -95547996 LOCK IN SHARE MODE\n" + //
+                "SELECT c0 FROM t WHERE 984597969\n" + //
+                "UPDATE t SET c3=1002103787, c0=\"뉨j\", c1=\"0.8177547792702022\" WHERE CAST((c1) AS FLOAT)\n" + //
+                "SELECT c3, c0, c1, c2 FROM t WHERE (-1531409349)IS NULL\n" + //
+                "COMMIT\n" + //
+                "\n" + //
+                "RR\n" + //
+                "BEGIN\n" + //
+                "SELECT c3, c0, c2 FROM t WHERE c2\n" + //
+                "UPDATE t SET c1=\"0.6749585621089517\" WHERE -571210708\n" + //
+                "SELECT c3, c0, c1, c2 FROM t WHERE c1\n" + //
+                "COMMIT\n" + //
+                "\n" + //
+                "1-2-2-1-1-1-2-1-1-1-2-2\n" + //
+                "END";
+        reducer.reduce(s);
 
-        txnTesting(options);
-        TableTool.cleanTrocTables();
+        // Options options = new Options();
+        // JCommander jCmd = new JCommander();
+        // jCmd.addObject(options);
+        // jCmd.parse(args);
+        // verifyOptions(options);
+        // log.info(String.format("Run tests for %s in [DB %s]-[Table %s] on [%s:%d]",
+        // options.getDBMS(), options.getDbName(), options.getTableName(),
+        // options.getHost(), options.getPort()));
+
+        // txnTesting(options);
+        // TableTool.cleanTrocTables();
     }
 
     private static void txnTesting(Options options) {
