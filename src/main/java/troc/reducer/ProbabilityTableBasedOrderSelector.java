@@ -6,4 +6,10 @@ public class ProbabilityTableBasedOrderSelector<T> implements OrderSelector<T> {
         // TODO Auto-generated method stub
         return null;
     }
+
+    @Override
+    public void removeCandidate(T candidate) {
+        // TODO Auto-generated method stub
+
+    }
 }
