@@ -18,7 +18,7 @@ public enum IsolationLevel {
         return this.name;
     }
 
-    static IsolationLevel getFromAlias(String alias) {
+    public static IsolationLevel getFromAlias(String alias) {
         switch (alias) {
             case "RU":
                 return READ_UNCOMMITTED;

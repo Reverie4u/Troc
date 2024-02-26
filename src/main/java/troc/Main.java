@@ -10,8 +10,6 @@ import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.ParseTree;
 
-import com.beust.jcommander.JCommander;
-
 import lombok.extern.slf4j.Slf4j;
 import troc.common.Table;
 import troc.mysql.ast.MySQLExpression;
@@ -42,7 +40,7 @@ public class Main {
         // MySQLExpression expression = new MySQLBinaryOperation(constant1, constant2,
         // MySQLBinaryOperator.XOR);
         // create a CharStream that reads from standard input
-         
+
         String input = "((- (c1))) NOT IN (CAST(((353686180) NOT IN (c0, 1266854665, 603312483)) XOR ((c2) IS NOT UNKNOWN) AS SIGNED), (((+ (c1))) IS NULL) IS NOT FALSE, (((c0) IS NOT FALSE) IN ((-1032203753) IN (-2049464461), c2)) XOR (((1552624276) BETWEEN (c2) AND (c2)) IS NOT UNKNOWN))";
         // create a lexer that feeds off of input CharStream
         MySQLExpressionLexer lexer = new MySQLExpressionLexer(CharStreams.fromString(input));
@@ -53,7 +51,7 @@ public class Main {
         // 这里得到的ParseTree是通用AST
         ParseTree tree = parser.expression(); // begin parsing at expression rule
         MySQLExpressionVisitorImpl visitor = new MySQLExpressionVisitorImpl();
-        
+
         // 通过调用visit函数将通用AST转换成自定义AST，自定义AST中的节点类型都是预定义好的
         // 这个地方可以调试看MySQLExpression的结构
         MySQLExpression expression = visitor.visit(tree);
@@ -67,17 +65,17 @@ public class Main {
         // jCmd.parse(args);
         // verifyOptions(options);
         // log.info(String.format("Run tests for %s in [DB %s]-[Table %s] on [%s:%d]",
-        //         options.getDBMS(), options.getDbName(), options.getTableName(),
-        //         options.getHost(), options.getPort()));
+        // options.getDBMS(), options.getDbName(), options.getTableName(),
+        // options.getHost(), options.getPort()));
 
         // txnTesting(options);
-        // TableTool.cleanTrocTables(); 
+        // TableTool.cleanTrocTables();
     }
 
     private static void txnTesting(Options options) {
         TableTool.initialize(options);
         Transaction tx1, tx2;
-        
+
         if (options.isSetCase()) {
             // 从文件或命令行读取事务
             Scanner scanner;

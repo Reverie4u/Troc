@@ -102,8 +102,8 @@ public class TableTool {
         TableTool.conn = getConnectionFromOptions(options);
         possibleIsolationLevels = new ArrayList<>(
                 Arrays.asList(IsolationLevel.READ_COMMITTED, IsolationLevel.REPEATABLE_READ));
-        if (TableTool.dbms == DBMS.MYSQL || TableTool.dbms == DBMS.MARIADB || TableTool.oracle.equals("MT")
-                || TableTool.oracle.equals("CS")) {
+        if ((TableTool.dbms == DBMS.MYSQL || TableTool.dbms == DBMS.MARIADB) && (TableTool.oracle.equals("MT")
+                || TableTool.oracle.equals("CS"))) {
             possibleIsolationLevels.add(IsolationLevel.READ_UNCOMMITTED);
             possibleIsolationLevels.add(IsolationLevel.SERIALIZABLE);
         }
@@ -149,7 +149,7 @@ public class TableTool {
             refPassword = "root";
         } else if (anotherDBMS.equals("TIDB")) {
             port = 4000;
-            refPassword = "root";
+            refPassword = "";
         }
         Connection con;
         try {
@@ -188,7 +188,9 @@ public class TableTool {
     static Transaction readTransactionFromScanner(Scanner input, int txId) {
         Transaction tx = new Transaction(txId);
         tx.conn = genConnection();
-        tx.refConn = genAnotherConnection();
+        if (refConn != null) {
+            tx.refConn = genAnotherConnection();
+        }
         String isolationAlias = input.nextLine();
         tx.isolationlevel = IsolationLevel.getFromAlias(isolationAlias);
         String sql;

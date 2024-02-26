@@ -21,13 +21,6 @@ import troc.mysql.ast.MySQLUnaryPrefixOperation;
 import troc.mysql.ast.MySQLUnaryPrefixOperation.MySQLUnaryPrefixOperator;
 import troc.mysql.visitor.MySQLExpressionVisitorImpl;
 
-enum StatementType {
-    UNKNOWN,
-    SELECT, SELECT_SHARE, SELECT_UPDATE,
-    UPDATE, DELETE, INSERT, SET,
-    BEGIN, COMMIT, ROLLBACK,
-}
-
 @Slf4j
 public class StatementCell {
     Transaction tx;
@@ -50,6 +43,10 @@ public class StatementCell {
     Map<String, String> insertMap;
     static MySQLExpressionVisitorImpl visitor = new MySQLExpressionVisitorImpl();
 
+    public StatementType getType() {
+        return type;
+    }
+
     public StatementCell(Transaction tx, int statementId) {
         this.tx = tx;
         this.statementId = statementId;
@@ -60,6 +57,12 @@ public class StatementCell {
         this.statementId = statementId;
         this.statement = statement.replace(";", "");
         this.type = StatementType.valueOf(this.statement.split(" ")[0]);
+        if (this.type == StatementType.CREATE) {
+            if (this.statement.contains("INDEX")) {
+                this.type = StatementType.CREATE_INDEX;
+            }
+            return;
+        }
         this.parseStatement();
         // 还需要解析update set columns
         if (this.type == StatementType.UPDATE) {
@@ -226,8 +229,7 @@ public class StatementCell {
                     recomputeStatement();
                     break;
                 case INSERT:
-                    Pattern pattern = Pattern.compile("INTO " + TableTool.TableName
-                            + "\\s*\\((.*?)\\) VALUES\\s*\\((.*?)\\)");
+                    Pattern pattern = Pattern.compile("INTO\\s+t\\s*\\((.*?)\\) VALUES\\s*\\((.*?)\\)");
                     Matcher matcher = pattern.matcher(this.statement);
                     if (!matcher.find()) {
                         throw new RuntimeException("parse INSERT statement failed");
