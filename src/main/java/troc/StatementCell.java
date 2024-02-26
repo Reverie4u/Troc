@@ -13,7 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 enum StatementType {
     UNKNOWN,
     SELECT, SELECT_SHARE, SELECT_UPDATE,
-    UPDATE, DELETE, INSERT, SET,
+    UPDATE, DELETE, INSERT, SET, 
     BEGIN, COMMIT, ROLLBACK,
 }
 
@@ -215,7 +215,10 @@ public class StatementCell {
         }
         return res;
     }
-
+    // 自己添加的测试输出
+    public String stmtToString(){
+        return statement;
+    }
     public boolean equals(StatementCell that) {
         if (that == null) {
             return false;

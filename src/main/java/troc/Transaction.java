@@ -55,4 +55,22 @@ public class Transaction {
         }
         return sb.toString();
     }
+    // 单独给Transaction中的Statements创建一个新内存备份
+    public Transaction copyForStmt(){
+        Transaction copy = new Transaction(txId, isolationlevel, conn);
+        copy.statements = new ArrayList<StatementCell>();
+        for(StatementCell cell : statements){
+            StatementCell cellCopy = cell.copy();
+            copy.statements.add(cellCopy);
+        }
+        copy.snapTxs = snapTxs;
+        copy.snapView = snapView;
+        copy.blocked = blocked;
+        copy.committed = committed;
+        copy.finished = finished;
+        copy.aborted = aborted;
+        copy.locks = locks;
+        copy.blockedStatements = blockedStatements;
+        return copy;
+    }
 }

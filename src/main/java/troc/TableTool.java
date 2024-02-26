@@ -26,7 +26,7 @@ public class TableTool {
     static private final String OriginalName = "origin";
     static public final int TxSizeMin = 3;
     static public final int TxSizeMax = 6;
-    static public final int CheckSize = 10;
+    static public final int CheckSize = 1;
     static public final Transaction txInit = new Transaction(0);
     static public final Randomly rand = new Randomly();
     static public final BugReport bugReport = new BugReport();
@@ -93,12 +93,16 @@ public class TableTool {
         return new SQLConnection(con);
     }
 
-    static void prepareTableFromScanner(Scanner input) {
+    static void prepareTableFromScanner(Scanner input, StringBuilder createSQL, List<String> initSQL) {
         // 删除掉troc表，如果存在的话
         TableTool.executeOnTable("DROP TABLE IF EXISTS " + TableName);
+        int cnt = -1;
         String sql;
         do {
+            ++cnt;
             sql = input.nextLine();
+            if(cnt == 0) createSQL.append(sql);
+            else if(cnt != 0 && !sql.equals(""))  initSQL.add(sql);
             if (sql.equals(""))
                 break;
             TableTool.executeOnTable(sql);
@@ -158,7 +162,7 @@ public class TableTool {
     /**
      * 为表添加rid列
      */
-    private static void addRowIdColumnAndFill() {
+    public static void addRowIdColumnAndFill() {
         AtomicBoolean hasRowIdCol = new AtomicBoolean(false);
         String query = "SELECT * FROM " + TableName;
         TableTool.executeQueryWithCallback(query, rs -> {
@@ -187,7 +191,7 @@ public class TableTool {
     /**
      * 将数据库表的元数据提取出来
      */
-    private static void fillTableMetaData() {
+    public static void fillTableMetaData() {
         nextRowId = getMaxRowId() + 1;
         colNames = new ArrayList<>();
         colTypeNames = new ArrayList<>();

@@ -15,6 +15,8 @@ public class TrocChecker {
 
     protected Transaction tx1;
     protected Transaction tx2;
+    protected String createStmt;
+    protected List<String> initStmts;
     private String bugInfo;
     private HashMap<Integer, ArrayList<Version>> vData;
     private boolean isDeadlock;
@@ -23,7 +25,12 @@ public class TrocChecker {
         this.tx1 = tx1;
         this.tx2 = tx2;
     }
-
+    public TrocChecker(StringBuilder createSQL, List<String> initSQL, Transaction tx1, Transaction tx2){
+        this.createStmt = createSQL.toString();
+        this.initStmts = initSQL;
+        this.tx1 = tx1;
+        this.tx2 = tx2;
+    }
     public void checkSchedule(String scheduleStr) {
         String[] schedule = scheduleStr.split("-");
         int len1 = tx1.statements.size();
@@ -72,9 +79,10 @@ public class TrocChecker {
     }
 
     private boolean oracleCheck(ArrayList<StatementCell> schedule) {
-        TableTool.allCase++;
-        log.info("Check new schedule:{}", schedule);
+      
+        TableTool.allCase++; 
         // 将origin表复制到troc表
+
         TableTool.recoverOriginalTable();
         bugInfo = "";
         // 1.正常执行的结果
@@ -87,14 +95,38 @@ public class TrocChecker {
         TxnPairResult mvccResult = inferOracleMVCC(scheduleClone(schedule));
         bugInfo = " -- MVCC Error \n";
         if (TableTool.options.isSetCase()) {
+         //   Reducer reducer = new Reducer(TableTool.bugReport.getCreateTableSQL(),TableTool.bugReport.getInitializeStatements(), tx1, tx2, schedule);
+            Reducer reducer = new Reducer(createStmt,initStmts, tx1, tx2, schedule);
             log.info("Schedule: " + schedule);
             log.info("Input schedule: " + getScheduleInputStr(schedule));
             log.info("Get execute result: " + execResult);
             log.info("MVCC-based oracle order: " + mvccResult.getOrder());
             log.info("MVCC-based oracle result: " + mvccResult);
+
+            reducer.reduceRowRule();
+            // reducer.reduceWhereRule();
+            // System.out.println("origin---------------------------------------------------------");
+            // System.out.println(tx1);
+            // System.out.println(tx2);
+            // for(String initStmt:reducer.getOriginalInitStmt()){
+            //     System.out.println(initStmt);
+            // }
+            // System.out.println(reducer.getOriginalSchedule());
+            // System.out.println(reducer.getOriginalTx1());
+            // System.out.println(reducer.getOriginalTx2()); 
+            
+            // System.out.println("simplified---------------------------------------------------------");
+            // for(String initStmt:reducer.getSimplifiedInitStmt()){
+            //     System.out.println(initStmt);
+            // }
+            // System.out.println(reducer.getSimplifiedSchedule());
+            // System.out.println(reducer.getSimplifiedTx1());
+            // System.out.println(reducer.getSimplifiedTx2());
+            // System.out.println("-------------------------------------------------------------------");
             return compareOracles(execResult, mvccResult);
         }
         if (compareOracles(execResult, mvccResult)) {
+          //  Reducer reducer = new Reducer(TableTool.bugReport.getCreateTableSQL(),TableTool.bugReport.getInitializeStatements(), tx1, tx2, schedule);
             log.info("Schedule: " + schedule);
             log.info("Input schedule: " + getScheduleInputStr(schedule));
             log.info("Get execute result: " + execResult);
@@ -102,6 +134,7 @@ public class TrocChecker {
             log.info("MVCC-based oracle result: " + mvccResult);
             return true;
         }
+
         TableTool.bugReport.setInputSchedule(getScheduleInputStr(schedule));
         TableTool.bugReport.setSubmittedOrder(schedule.toString());
         TableTool.bugReport.setExecRes(execResult);
@@ -188,7 +221,67 @@ public class TrocChecker {
         tx2.clearStates();
         return result;
     }
+    public TxnPairResult inferOracleMVCCForReduce(ArrayList<StatementCell> schedule) {
+        // 将origin表复制到troc表
+      //  TableTool.recoverOriginalTable();
+        isDeadlock = false;
+        ArrayList<StatementCell> oracleOrder = new ArrayList<>();
+        TableTool.firstTxnInSerOrder = null;
+        tx1.clearStates();
+        tx2.clearStates();
+        vData = TableTool.initVersionData();
+        log.info("init mvcc: {}", vData);
+        // 初始状态每一行只有一个版本
+        boolean hasConflict = false;
+        for (StatementCell stmt : schedule) {
 
+            Transaction curTx = stmt.tx;
+            Transaction otherTx = curTx == tx1 ? tx2 : tx1;
+            if (curTx.blocked) {
+                curTx.blockedStatements.add(stmt);
+                continue;
+            }
+            boolean blocked = analyzeStmt(stmt, curTx, otherTx);
+            if (blocked) {
+                hasConflict = true;
+                StatementCell blockPoint = stmt.copy();
+                blockPoint.blocked = true;
+                oracleOrder.add(blockPoint);
+                curTx.blockedStatements.add(stmt);
+            } else {
+                oracleOrder.add(stmt);
+                if (stmt.type == StatementType.COMMIT || stmt.type == StatementType.ROLLBACK) {
+                    // 当前事务提交的时候, 把另一个事务的阻塞语句重新分析一遍。
+                    otherTx.blocked = false;
+                    for (StatementCell blockedStmt : otherTx.blockedStatements) {
+                        analyzeStmt(blockedStmt, otherTx, curTx);
+                        oracleOrder.add(blockedStmt);
+                        log.info("after blockedStmt: {},  mvcc: {}", blockedStmt, vData);
+                    }
+                }
+            }
+            log.info("after stmt: {},  mvcc: {}", stmt, vData);
+            if (curTx.blocked && otherTx.blocked) {
+                isDeadlock = true;
+                tx1.clearStates();
+                tx2.clearStates();
+                break;
+            }
+        }
+        if (hasConflict) {
+            TableTool.txPairHasConflict = true;
+            TableTool.conflictCase++;
+        }
+        TableTool.viewToTable(newestView());
+        ArrayList<Object> finalState = TableTool.getFinalStateAsList();
+        TxnPairResult result = new TxnPairResult();
+        result.setOrder(oracleOrder);
+        result.setFinalState(finalState);
+        result.setDeadBlock(isDeadlock);
+        tx1.clearStates();
+        tx2.clearStates();
+        return result;
+    }
     private boolean analyzeStmt(StatementCell stmt, Transaction curTx, Transaction otherTx) {
         if (curTx.aborted) {
             if (stmt.type != StatementType.COMMIT && stmt.type != StatementType.ROLLBACK) {
@@ -572,7 +665,7 @@ public class TrocChecker {
         return res;
     }
 
-    private boolean compareOracles(TxnPairResult execRes, TxnPairResult oracleRes) {
+    public boolean compareOracles(TxnPairResult execRes, TxnPairResult oracleRes) {
         log.info("txp: {}, all case: {}, skip: {}", TableTool.txPair, TableTool.allCase, TableTool.skipCase);
         ArrayList<StatementCell> execOrder = execRes.getOrder();
         ArrayList<StatementCell> oracleOrder = oracleRes.getOrder();

@@ -3,7 +3,9 @@ package troc;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Scanner;
 
 import com.beust.jcommander.JCommander;
@@ -45,7 +47,10 @@ public class Main {
                 }
             }
             // 执行文件中或命令行输入的建表语句
-            TableTool.prepareTableFromScanner(scanner);
+            StringBuilder createSQL = new StringBuilder();
+            List<String> initSQL = new ArrayList<String>();
+            TableTool.prepareTableFromScanner(scanner,createSQL,initSQL);
+            
             // 对表进行预处理
             TableTool.preProcessTable();
             log.info("Initial table:\n{}", TableTool.tableToView());
@@ -57,7 +62,7 @@ public class Main {
             scanner.close();
             log.info("Read transactions from file:\n{}{}", tx1, tx2);
             TableTool.txPair++;
-            TrocChecker checker = new TrocChecker(tx1, tx2);
+            TrocChecker checker = new TrocChecker(createSQL,initSQL,tx1, tx2);
             if (!scheduleStr.equals("")) {
                 log.info("Get schedule from file: {}", scheduleStr);
                 // 根据读取的提交顺序进行check
