@@ -112,6 +112,7 @@ public class Reducer {
         }
         // 更新submittedOrder
         testCase.submittedOrder.remove(stmts.get(idx));
+        // TODO: 目前不管本次删除是否合理，都将该语句从stmtTypeMap中删除，后续可以考虑删除失败的情况只对语句做标记。
         stmts.remove(idx);
     }
 
