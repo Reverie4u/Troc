@@ -57,4 +57,7 @@ public class Options {
 
     @Parameter(names = "--filter-duplicate-bug", description = "Whether to enable duplicate bug filtering")
     private boolean filterDuplicateBug = false;
+
+    @Parameter(names = "--reducer", description = "Whether to enable reducer")
+    private boolean reducerSwitchOn = false;
 }

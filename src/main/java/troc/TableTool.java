@@ -23,6 +23,7 @@ import troc.mysql.ast.MySQLConstant.MySQLNullConstant;
 import troc.mysql.ast.MySQLUnaryPostfixOperation;
 import troc.mysql.ast.MySQLUnaryPrefixOperation;
 import troc.mysql.ast.MySQLUnaryPrefixOperation.MySQLUnaryPrefixOperator;
+import troc.reducer.TestCase;
 
 @Slf4j
 public class TableTool {
@@ -79,6 +80,8 @@ public class TableTool {
     static public double submitOrderCountBeforeFilter = 0;
     static public double submitOrderCountAfterFilter = 0;
     static public boolean isFilterDuplicateBug = false;
+    static public boolean isReducer = false;
+    static public boolean reducerSwitchOn = false;
 
     static void initialize(Options options) {
         refMap = new HashMap<>();
@@ -100,6 +103,7 @@ public class TableTool {
             TableTool.refConn = getAnotherConnectionFromOptions(options);
         }
         TableTool.conn = getConnectionFromOptions(options);
+        reducerSwitchOn = options.isReducerSwitchOn();
         possibleIsolationLevels = new ArrayList<>(
                 Arrays.asList(IsolationLevel.READ_COMMITTED, IsolationLevel.REPEATABLE_READ));
         if ((TableTool.dbms == DBMS.MYSQL || TableTool.dbms == DBMS.MARIADB) && (TableTool.oracle.equals("MT")
@@ -170,14 +174,18 @@ public class TableTool {
         return new SQLConnection(con);
     }
 
-    static void prepareTableFromScanner(Scanner input) {
+    static void prepareTableFromScanner(Scanner input, TestCase testCase) {
         // 删除掉troc表，如果存在的话
         TableTool.executeOnTable("DROP TABLE IF EXISTS " + TableName);
         String sql;
+        sql = input.nextLine();
+        testCase.createStmt = new StatementCell(null, -1, sql);
+        TableTool.executeOnTable(sql);
         do {
             sql = input.nextLine();
             if (sql.equals(""))
                 break;
+            testCase.prepareTableStmts.add(new StatementCell(null, -1, sql));
             TableTool.executeOnTable(sql);
         } while (true);
     }
@@ -231,7 +239,13 @@ public class TableTool {
      */
     public static void preProcessTable() {
         addRowIdColumnAndFill();
-        backupOriginalTable();
+        // 使用reducer时应该避免这个操作
+        if (!isReducer) {
+            backupOriginalTable();
+        } else {
+            String snapshotName = "reducer";
+            takeSnapshotForTable(snapshotName);
+        }
         fillTableMetaData();
     }
 

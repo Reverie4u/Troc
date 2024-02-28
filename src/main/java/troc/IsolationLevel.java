@@ -18,6 +18,10 @@ public enum IsolationLevel {
         return this.name;
     }
 
+    public String getAlias() {
+        return alias;
+    }
+
     public static IsolationLevel getFromAlias(String alias) {
         switch (alias) {
             case "RU":
