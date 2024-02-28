@@ -10,11 +10,14 @@ import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.ParseTree;
 
+import com.beust.jcommander.JCommander;
+
 import lombok.extern.slf4j.Slf4j;
 import troc.common.Table;
 import troc.mysql.ast.MySQLExpression;
 import troc.mysql.visitor.MySQLExpressionVisitorImpl;
 import troc.mysql.visitor.MySQLVisitor;
+import troc.reducer.TestCase;
 
 @Slf4j
 public class Main {
@@ -59,17 +62,17 @@ public class Main {
         // 求解expression
         // MySQLExpression result = expression.getExpectedValue(null);
 
-        // Options options = new Options();
-        // JCommander jCmd = new JCommander();
-        // jCmd.addObject(options);
-        // jCmd.parse(args);
-        // verifyOptions(options);
-        // log.info(String.format("Run tests for %s in [DB %s]-[Table %s] on [%s:%d]",
-        // options.getDBMS(), options.getDbName(), options.getTableName(),
-        // options.getHost(), options.getPort()));
+        Options options = new Options();
+        JCommander jCmd = new JCommander();
+        jCmd.addObject(options);
+        jCmd.parse(args);
+        verifyOptions(options);
+        log.info(String.format("Run tests for %s in [DB %s]-[Table %s] on [%s:%d]",
+                options.getDBMS(), options.getDbName(), options.getTableName(),
+                options.getHost(), options.getPort()));
 
-        // txnTesting(options);
-        // TableTool.cleanTrocTables();
+        txnTesting(options);
+        TableTool.cleanTrocTables();
     }
 
     private static void txnTesting(Options options) {
@@ -91,14 +94,17 @@ public class Main {
                     throw new RuntimeException("Read case from file failed: ", e);
                 }
             }
+            TestCase testCase = new TestCase();
             // 执行文件中或命令行输入的建表语句
-            TableTool.prepareTableFromScanner(scanner);
+            TableTool.prepareTableFromScanner(scanner, testCase);
             // 对表进行预处理
             TableTool.preProcessTable();
             log.info("Initial table:\n{}", TableTool.tableToView());
             // 读取两个事务
             tx1 = TableTool.readTransactionFromScanner(scanner, 1);
             tx2 = TableTool.readTransactionFromScanner(scanner, 2);
+            testCase.tx1 = tx1;
+            testCase.tx2 = tx2;
             // 读取提交顺序
             String scheduleStr = TableTool.readScheduleFromScanner(scanner);
             scanner.close();
@@ -108,7 +114,7 @@ public class Main {
             if (!scheduleStr.equals("")) {
                 log.info("Get schedule from file: {}", scheduleStr);
                 // 根据读取的提交顺序进行check
-                checker.checkSchedule(scheduleStr);
+                checker.checkSchedule(scheduleStr, testCase);
             } else {
                 checker.checkAll();
             }

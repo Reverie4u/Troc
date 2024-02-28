@@ -13,6 +13,8 @@ import lombok.extern.slf4j.Slf4j;
 import troc.common.IgnoreMeException;
 import troc.mysql.ast.MySQLConstant;
 import troc.mysql.ast.MySQLConstant.MySQLNullConstant;
+import troc.reducer.Reducer;
+import troc.reducer.TestCase;
 
 @Slf4j
 public class TrocChecker {
@@ -28,7 +30,7 @@ public class TrocChecker {
         this.tx2 = tx2;
     }
 
-    public void checkSchedule(String scheduleStr) {
+    public void checkSchedule(String scheduleStr, TestCase testCase) {
         String[] schedule = scheduleStr.split("-");
         int len1 = tx1.statements.size();
         int len2 = tx2.statements.size();
@@ -46,7 +48,13 @@ public class TrocChecker {
                 throw new RuntimeException("Invalid Schedule");
             }
         }
-        oracleCheck(submittedOrder);
+        testCase.submittedOrder = submittedOrder;
+        if (!oracleCheck(submittedOrder) && TableTool.reducerSwitchOn) {
+            log.info("Find a bug, start reducer");
+            Reducer reducer = new Reducer();
+            String res = reducer.reduce(testCase.toString());
+            log.info("Reducer result: \n{}", res);
+        }
     }
 
     public void checkRandom() {
@@ -199,7 +207,11 @@ public class TrocChecker {
         TableTool.allCase++;
         log.info("Check new schedule:{}", schedule);
         // 将origin表复制到troc表
-        TableTool.recoverOriginalTable();
+        if (!TableTool.isReducer) {
+            TableTool.recoverOriginalTable();
+        } else {
+            TableTool.recoverTableFromSnapshot("reducer");
+        }
         bugInfo = "";
         // 1.正常执行的结果
         TxnPairExecutor executor = new TxnPairExecutor(scheduleClone(schedule), tx1, tx2, false);
@@ -240,11 +252,13 @@ public class TrocChecker {
 
         bugInfo = " -- MVCC Error \n";
         if (TableTool.options.isSetCase()) {
-            log.info("Schedule: " + schedule);
-            log.info("Input schedule: " + getScheduleInputStr(schedule));
-            log.info("Get execute result: " + execResult);
-            log.info("MVCC-based oracle order: " + mvccResult.getOrder());
-            log.info("MVCC-based oracle result: " + mvccResult);
+            if (!TableTool.isReducer) {
+                log.info("Schedule: " + schedule);
+                log.info("Input schedule: " + getScheduleInputStr(schedule));
+                log.info("Get execute result: " + execResult);
+                log.info("MVCC-based oracle order: " + mvccResult.getOrder());
+                log.info("MVCC-based oracle result: " + mvccResult);
+            }
             return compareOracles(execResult, mvccResult);
         }
         if (compareOracles(execResult, mvccResult)) {
@@ -264,7 +278,7 @@ public class TrocChecker {
         return false;
     }
 
-    private boolean oracleCheck(ArrayList<StatementCell> schedule) {
+    public boolean oracleCheck(ArrayList<StatementCell> schedule) {
         if (TableTool.options.getOracle().equals("DT")) {
             return oracleCheckByDT(schedule);
         } else if (TableTool.options.getOracle().equals("CS")) {
@@ -301,7 +315,12 @@ public class TrocChecker {
 
     private TxnPairResult inferOracleMVCC(ArrayList<StatementCell> schedule) {
         // 将origin表复制到troc表
-        TableTool.recoverOriginalTable();
+        // 这里设置一个标记，如果是reducer调用，就不用恢复了
+        if (!TableTool.isReducer) {
+            TableTool.recoverOriginalTable();
+        } else {
+            TableTool.recoverTableFromSnapshot("reducer");
+        }
         isDeadlock = false;
         ArrayList<StatementCell> oracleOrder = new ArrayList<>();
         TableTool.firstTxnInSerOrder = null;

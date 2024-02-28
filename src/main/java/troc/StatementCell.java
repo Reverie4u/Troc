@@ -47,6 +47,10 @@ public class StatementCell {
         return type;
     }
 
+    public Transaction getTx() {
+        return tx;
+    }
+
     public StatementCell(Transaction tx, int statementId) {
         this.tx = tx;
         this.statementId = statementId;
@@ -89,7 +93,7 @@ public class StatementCell {
                 whereIdx = parts.length;
             }
             setMap.put(parts[setIdx + 1], parts[whereIdx - 1]);
-            log.info("Set columns: {}", this.setMap.toString());
+            // log.info("Set columns: {}", this.setMap.toString());
         }
         // 还需要解析select columns
         if (this.type == StatementType.SELECT) {
@@ -108,7 +112,7 @@ public class StatementCell {
             for (int i = 1; i < fromIdx; i++) {
                 this.selectedColumns.add(parts[i]);
             }
-            log.info("Selected columns: {}", this.selectedColumns.toString());
+            // log.info("Selected columns: {}", this.selectedColumns.toString());
         }
         if (("ALL".equals(TableTool.oracle) || "CS".equals(TableTool.oracle)) && this.whereClause != null
                 && !this.whereClause.isEmpty()) {
@@ -336,11 +340,12 @@ public class StatementCell {
         return res;
     }
 
-    public boolean equals(StatementCell that) {
+    public boolean equals(Object that) {
         if (that == null) {
             return false;
         }
-        return tx.txId == that.tx.txId && statementId == that.statementId;
+        StatementCell s = (StatementCell) that;
+        return tx.txId == s.tx.txId && statementId == s.statementId;
     }
 
     public StatementCell copy() {

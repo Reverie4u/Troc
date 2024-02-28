@@ -15,12 +15,12 @@ public class Reducer {
     // 全局只有一个Reducer
     OrderSelector<StatementType> stmtDelOrderSelector;
     Map<StatementType, ArrayList<StatementCell>> stmtTypeMap;
-    static int maxReduceCount = 5;
+    static int maxReduceCount = 17;
 
     public Reducer() {
         stmtTypeMap = new HashMap<>();
         List<StatementType> candidates = new ArrayList<>();
-        StatementType[] types = new StatementType[] { StatementType.BEGIN, StatementType.COMMIT, StatementType.ROLLBACK,
+        StatementType[] types = new StatementType[] { StatementType.ROLLBACK,
                 StatementType.SELECT, StatementType.UPDATE, StatementType.INSERT, StatementType.DELETE,
                 StatementType.CREATE_INDEX, StatementType.SELECT_SHARE,
                 StatementType.SELECT_UPDATE };
@@ -58,30 +58,67 @@ public class Reducer {
             stmtTypeMap.get(stmt.getType()).add(stmt);
         }
         for (StatementCell stmt : testCase.tx1.getStatements()) {
-            stmtTypeMap.get(stmt.getType()).add(stmt);
+            if (stmt.getType() != StatementType.BEGIN && stmt.getType() != StatementType.COMMIT) {
+                stmtTypeMap.get(stmt.getType()).add(stmt);
+            }
         }
         for (StatementCell stmt : testCase.tx2.getStatements()) {
-            stmtTypeMap.get(stmt.getType()).add(stmt);
+            if (stmt.getType() != StatementType.BEGIN && stmt.getType() != StatementType.COMMIT) {
+                stmtTypeMap.get(stmt.getType()).add(stmt);
+            }
         }
         OracleChecker oracleChecker = new MTOracleChecker();
         // 选择一个语句类型
         for (int i = 0; i < maxReduceCount; i++) {
             // 首先克隆一份testcase
             TestCase clonedTestCase = testCaseClone(testCase);
-            // 然后按照顺序删除语句
-            if (!oracleChecker.hasBug(clonedTestCase)) {
+            // TODO:然后按照顺序删除语句
+            deleteStatement(clonedTestCase);
+            System.out.println("删除后的测试用例：" + clonedTestCase.toString());
+            if (oracleChecker.hasBug(clonedTestCase.toString())) {
+                System.out.println("删除后仍能复现bug");
                 // 删除后仍能复现bug则更新测试用例
                 testCase = clonedTestCase;
             }
         }
         // 将测试用例转换为字符串输出
-        return testCase.toString();
+        String res = testCase.toString();
+        System.out.println(res);
+        return res;
+    }
+
+    private void deleteStatement(TestCase testCase) {
+        List<StatementType> excludedTypes = new ArrayList<>();
+        // 遍历stmtTypeMap，将列表为空的类型加入excludedTypes
+        for (Map.Entry<StatementType, ArrayList<StatementCell>> entry : stmtTypeMap.entrySet()) {
+            if (entry.getValue().isEmpty()) {
+                excludedTypes.add(entry.getKey());
+            }
+        }
+        StatementType type = stmtDelOrderSelector.selectNext(excludedTypes);
+        ArrayList<StatementCell> stmts = stmtTypeMap.get(type);
+        // System.out.println("待删除语句列表：" + stmts);
+        // 随机抽取一个语句删除
+        int idx = (int) (Math.random() * stmts.size());
+        int txId = stmts.get(idx).getTx().getTxId();
+        // 待删除语句
+        System.out.println("待删除语句：" + stmts.get(idx));
+        if (txId == 1) {
+            testCase.tx1.getStatements().remove(stmts.get(idx));
+        } else if (txId == 2) {
+            testCase.tx2.getStatements().remove(stmts.get(idx));
+        } else {
+            testCase.prepareTableStmts.remove(stmts.get(idx));
+        }
+        // 更新submittedOrder
+        testCase.submittedOrder.remove(stmts.get(idx));
+        stmts.remove(idx);
     }
 
     /*
      * 从Scanner中读取事务
      */
-    static Transaction readTransaction(Scanner input, int txId) {
+    public static Transaction readTransaction(Scanner input, int txId) {
         Transaction tx = new Transaction(txId);
         String isolationAlias = input.nextLine();
         tx.setIsolationlevel(IsolationLevel.getFromAlias(isolationAlias));
@@ -101,7 +138,7 @@ public class Reducer {
     /*
      * 从Scanner中读取提交顺序
      */
-    static String readSchedule(Scanner input) {
+    public static String readSchedule(Scanner input) {
         do {
             if (!input.hasNext())
                 break;
@@ -118,7 +155,7 @@ public class Reducer {
     /*
      * 解析提交顺序是否合法
      */
-    public ArrayList<StatementCell> parseSchedule(Transaction tx1, Transaction tx2, String scheduleStr) {
+    public static ArrayList<StatementCell> parseSchedule(Transaction tx1, Transaction tx2, String scheduleStr) {
         String[] schedule = scheduleStr.split("-");
         int len1 = tx1.getStatements().size();
         int len2 = tx2.getStatements().size();
@@ -142,7 +179,7 @@ public class Reducer {
     /*
      * 解析测试用例
      */
-    private TestCase parse(String tc) {
+    public static TestCase parse(String tc) {
         // 从字符串读取事务
         Scanner input = new Scanner(tc);
         // 读取建表语句
@@ -150,11 +187,13 @@ public class Reducer {
         TestCase testCase = new TestCase();
         sql = input.nextLine();
         testCase.createStmt = new StatementCell(null, -1, sql);
+        int i = 0;
         do {
             sql = input.nextLine();
             if (sql.equals(""))
                 break;
-            testCase.prepareTableStmts.add(new StatementCell(null, -1, sql));
+            testCase.prepareTableStmts.add(new StatementCell(new Transaction(0), i, sql));
+            i++;
         } while (true);
         // 读取其他语句
         testCase.tx1 = readTransaction(input, 1);
