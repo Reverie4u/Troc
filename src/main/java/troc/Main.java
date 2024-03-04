@@ -73,6 +73,7 @@ public class Main {
 
         txnTesting(options);
         TableTool.cleanTrocTables();
+
     }
 
     private static void txnTesting(Options options) {
@@ -149,11 +150,18 @@ public class Main {
                         Thread.sleep(1000);
                     } catch (InterruptedException e) {
                     }
+                    TestCase testCase = new TestCase();
+                    testCase.createStmt = new StatementCell(null, -1, table.getCreateTableSql());
+                    for (String sql : table.getInitializeStatements()) {
+                        testCase.prepareTableStmts.add(new StatementCell(new Transaction(0), -1, sql));
+                    }
                     // 恢复原始table
                     TableTool.recoverOriginalTable();
                     // 生成两个事务
                     tx1 = table.genTransaction(1);
                     tx2 = table.genTransaction(2);
+                    testCase.tx1 = tx1;
+                    testCase.tx2 = tx2;
                     TableTool.recoverOriginalTable();
                     // 手动构建冲突
                     log.info("Before make conflict------------------------");
@@ -167,7 +175,7 @@ public class Main {
                     log.info("Transaction 2:\n{}", tx2);
                     TrocChecker checker = new TrocChecker(tx1, tx2);
                     // 随机生成提交顺序
-                    checker.checkRandom();
+                    checker.checkRandom(testCase);
                     log.info("submitOrderCountBeforeFilter:{}, submitOrderCountAfterFilter:{}",
                             TableTool.submitOrderCountBeforeFilter, TableTool.submitOrderCountAfterFilter);
                     if (TableTool.txPairHasConflict) {

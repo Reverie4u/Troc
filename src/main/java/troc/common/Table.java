@@ -47,7 +47,7 @@ public abstract class Table {
         return createTableSql;
     }
 
-    public List<String> getInitializeStatements() {
+    public ArrayList<String> getInitializeStatements() {
         return initializeStatements;
     }
 

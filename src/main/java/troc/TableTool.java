@@ -23,6 +23,7 @@ import troc.mysql.ast.MySQLConstant.MySQLNullConstant;
 import troc.mysql.ast.MySQLUnaryPostfixOperation;
 import troc.mysql.ast.MySQLUnaryPrefixOperation;
 import troc.mysql.ast.MySQLUnaryPrefixOperation.MySQLUnaryPrefixOperator;
+import troc.reducer.Reducer;
 import troc.reducer.TestCase;
 
 @Slf4j
@@ -82,6 +83,11 @@ public class TableTool {
     static public boolean isFilterDuplicateBug = false;
     static public boolean isReducer = false;
     static public boolean reducerSwitchOn = false;
+    static public String reducerType = "random";
+    static public Reducer randomReducer;
+    static public Reducer probabilityTableReducer;
+    static public Reducer epsilonGreedyReducer;
+    static public int maxReduceCount = 5;
 
     static void initialize(Options options) {
         refMap = new HashMap<>();
@@ -99,6 +105,11 @@ public class TableTool {
         isFilterDuplicateBug = options.isFilterDuplicateBug();
         isSetCase = options.isSetCase();
         oracle = options.getOracle();
+        reducerType = options.getReducerType();
+        maxReduceCount = options.getMaxReduceCount();
+        randomReducer = new Reducer(0);
+        probabilityTableReducer = new Reducer(1);
+        epsilonGreedyReducer = new Reducer(2);
         if (oracle.equals("DT") || oracle.equals("ALL")) {
             TableTool.refConn = getAnotherConnectionFromOptions(options);
         }
@@ -185,7 +196,7 @@ public class TableTool {
             sql = input.nextLine();
             if (sql.equals(""))
                 break;
-            testCase.prepareTableStmts.add(new StatementCell(null, -1, sql));
+            testCase.prepareTableStmts.add(new StatementCell(new Transaction(0), -1, sql));
             TableTool.executeOnTable(sql);
         } while (true);
     }

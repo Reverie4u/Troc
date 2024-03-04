@@ -24,6 +24,7 @@ public class TxnPairExecutor {
     private boolean isDeadLock = false;
     private boolean isSematicError = false;
     private boolean isSyntaxError = false;
+    private boolean isRestart = false;
     private boolean timeout = false;
     private String exceptionMessage = "";
     private final Map<Integer, Boolean> txnAbort = new HashMap<>();
@@ -114,6 +115,8 @@ public class TxnPairExecutor {
                     || exceptionMessage.contains("TransactionRetry")) {
                 txnAbort.put(txn, true);
                 statementCell.aborted = true;
+                isRestart = true;
+                return true;
             }
             return false;
         }
@@ -284,7 +287,7 @@ public class TxnPairExecutor {
                 }
             }
             // 发生死锁时，跳出for循环
-            if (isDeadLock || isSematicError || isSyntaxError) {
+            if (isDeadLock || isSematicError || isSyntaxError || isRestart || timeout) {
                 try {
                     tx1.conn.createStatement().executeUpdate("ROLLBACK"); // stop transaction
                     tx2.conn.createStatement().executeUpdate("ROLLBACK");
