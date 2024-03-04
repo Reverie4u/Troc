@@ -39,50 +39,6 @@ public class Main {
         // // 求解expression
         // MySQLExpression result = expression.getExpectedValue(null);
 
-        // Reducer reducer = new Reducer();
-        // String s = "CREATE TABLE t(c0 CHAR(9), c1 TEXT NOT NULL, c2 TEXT NOT NULL, c3
-        // INT PRIMARY KEY) CHECKSUM = 1, MIN_ROWS = 8025480462799352670, MAX_ROWS =
-        // 7649209172219367279, STATS_PERSISTENT = DEFAULT, AUTO_INCREMENT =
-        // 1180316673726627002\n"
-        // + //
-        // "INSERT IGNORE INTO t(c3, c1, c2) VALUES (1040804670, \"\", \"470706956\")\n"
-        // + //
-        // "INSERT INTO t(c0, c1, c2, c3) VALUES (\"6Zpl]\", \"ꪞX*/\", \"-1119299061\",
-        // 1825853323)\n" + //
-        // "INSERT INTO t(c1, c3, c2) VALUES (\"hw逼Z㶇3ꕓ<\", -686966298,
-        // \"0.9227050532104513\")\n" + //
-        // "INSERT IGNORE INTO t(c3, c0, c1, c2) VALUES (990209122, \"104080467\",
-        // \"rL|\", \"s\")\n" + //
-        // "INSERT IGNORE INTO t(c0, c1, c2, c3) VALUES (\"2H轝\", \"1985062227\",
-        // \"EDl\", 279293156)\n" + //
-        // "INSERT INTO t(c3, c0, c2, c1) VALUES (-827318654, \"\", \"n *蠡R\",
-        // \"SjOky9g\")\n" + //
-        // "INSERT IGNORE INTO t(c1, c3, c2) VALUES (\"橨w\", 190006852, \"\")\n" + //
-        // "INSERT IGNORE INTO t(c0, c1, c3, c2) VALUES (\"\", \"맦oJ\", -242231686,
-        // \"\")\n" + //
-        // "INSERT INTO t(c1, c3, c2) VALUES (\"Y0v*B摩XV\", -1519129264, \"uO\")\n" + //
-        // "\n" + //
-        // "RU\n" + //
-        // "BEGIN\n" + //
-        // "SELECT c3, c0, c1, c2 FROM t WHERE -2.42231686E8\n" + //
-        // "SELECT c0, c1, c2 FROM t WHERE -95547996 LOCK IN SHARE MODE\n" + //
-        // "SELECT c0 FROM t WHERE 984597969\n" + //
-        // "UPDATE t SET c3=1002103787, c0=\"뉨j\", c1=\"0.8177547792702022\" WHERE
-        // CAST((c1) AS FLOAT)\n" + //
-        // "SELECT c3, c0, c1, c2 FROM t WHERE (-1531409349)IS NULL\n" + //
-        // "COMMIT\n" + //
-        // "\n" + //
-        // "RR\n" + //
-        // "BEGIN\n" + //
-        // "SELECT c3, c0, c2 FROM t WHERE c2\n" + //
-        // "UPDATE t SET c1=\"0.6749585621089517\" WHERE -571210708\n" + //
-        // "SELECT c3, c0, c1, c2 FROM t WHERE c1\n" + //
-        // "COMMIT\n" + //
-        // "\n" + //
-        // "1-2-2-1-1-1-2-1-1-1-2-2\n" + //
-        // "END";
-        // reducer.reduce(s);
-
         Options options = new Options();
         JCommander jCmd = new JCommander();
         jCmd.addObject(options);
@@ -94,6 +50,7 @@ public class Main {
 
         txnTesting(options);
         TableTool.cleanTrocTables();
+
     }
 
     private static void txnTesting(Options options) {
@@ -169,11 +126,18 @@ public class Main {
                         Thread.sleep(1000);
                     } catch (InterruptedException e) {
                     }
+                    TestCase testCase = new TestCase();
+                    testCase.createStmt = new StatementCell(null, -1, table.getCreateTableSql());
+                    for (String sql : table.getInitializeStatements()) {
+                        testCase.prepareTableStmts.add(new StatementCell(new Transaction(0), -1, sql));
+                    }
                     // 恢复原始table
                     TableTool.recoverOriginalTable();
                     // 生成两个事务
                     tx1 = table.genTransaction(1);
                     tx2 = table.genTransaction(2);
+                    testCase.tx1 = tx1;
+                    testCase.tx2 = tx2;
                     TableTool.recoverOriginalTable();
                     // 手动构建冲突
                     log.info("Before make conflict------------------------");
@@ -187,7 +151,7 @@ public class Main {
                     log.info("Transaction 2:\n{}", tx2);
                     TrocChecker checker = new TrocChecker(tx1, tx2);
                     // 随机生成提交顺序
-                    checker.checkRandom();
+                    checker.checkRandom(testCase);
                     log.info("submitOrderCountBeforeFilter:{}, submitOrderCountAfterFilter:{}",
                             TableTool.submitOrderCountBeforeFilter, TableTool.submitOrderCountAfterFilter);
                     if (TableTool.txPairHasConflict) {

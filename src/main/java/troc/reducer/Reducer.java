@@ -6,29 +6,61 @@ import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
 
+import lombok.extern.slf4j.Slf4j;
 import troc.IsolationLevel;
 import troc.StatementCell;
 import troc.StatementType;
+import troc.TableTool;
 import troc.Transaction;
 
+@Slf4j
 public class Reducer {
     // 全局只有一个Reducer
     OrderSelector<StatementType> stmtDelOrderSelector;
+    // 第一层简化的map
     Map<StatementType, ArrayList<StatementCell>> stmtTypeMap;
-    static int maxReduceCount = 17;
+    // 第一层简化失败的语句map
+    Map<StatementType, ArrayList<StatementCell>> stmtTypeFailMap;
+    // 最大简化次数
+    int maxReduceCount = 0;
+    int allReduceCount = 0;
+    int vaildReduceCount = 0;
 
-    public Reducer() {
+    public int getVaildReduceCount() {
+        return vaildReduceCount;
+    }
+
+    public int getAllReduceCount() {
+        return allReduceCount;
+    }
+
+    public Reducer(int selectorType) {
+        maxReduceCount = TableTool.maxReduceCount;
         stmtTypeMap = new HashMap<>();
+        stmtTypeFailMap = new HashMap<>();
         List<StatementType> candidates = new ArrayList<>();
-        StatementType[] types = new StatementType[] { StatementType.ROLLBACK,
+        StatementType[] types = new StatementType[] {
                 StatementType.SELECT, StatementType.UPDATE, StatementType.INSERT, StatementType.DELETE,
                 StatementType.CREATE_INDEX, StatementType.SELECT_SHARE,
                 StatementType.SELECT_UPDATE };
         for (StatementType type : types) {
             stmtTypeMap.put(type, new ArrayList<>());
+            stmtTypeFailMap.put(type, new ArrayList<>());
             candidates.add(type);
         }
-        stmtDelOrderSelector = new RandomOrderSelector<>(candidates);
+        switch (selectorType) {
+            case 0:
+                stmtDelOrderSelector = new RandomOrderSelector<>(candidates);
+                break;
+            case 1:
+                stmtDelOrderSelector = new ProbabilityTableBasedOrderSelector<>(candidates);
+                break;
+            case 2:
+                stmtDelOrderSelector = new EpsilonGreedyOrderSelector<>(candidates);
+                break;
+            default:
+                break;
+        }
     }
 
     private ArrayList<StatementCell> stmtListClone(List<StatementCell> stmts) {
@@ -52,42 +84,64 @@ public class Reducer {
     }
 
     public String reduce(String tc) {
+        // stmtTypeMap和stmtTypeFailMap需要清空
+        for (Map.Entry<StatementType, ArrayList<StatementCell>> entry : stmtTypeMap.entrySet()) {
+            entry.getValue().clear();
+        }
+        for (Map.Entry<StatementType, ArrayList<StatementCell>> entry : stmtTypeFailMap.entrySet()) {
+            entry.getValue().clear();
+        }
         TestCase testCase = parse(tc);
         // 将语句按照类型划分
         for (StatementCell stmt : testCase.prepareTableStmts) {
             stmtTypeMap.get(stmt.getType()).add(stmt);
         }
         for (StatementCell stmt : testCase.tx1.getStatements()) {
-            if (stmt.getType() != StatementType.BEGIN && stmt.getType() != StatementType.COMMIT) {
+            if (stmt.getType() != StatementType.BEGIN && stmt.getType() != StatementType.COMMIT
+                    && stmt.getType() != StatementType.ROLLBACK) {
                 stmtTypeMap.get(stmt.getType()).add(stmt);
             }
         }
         for (StatementCell stmt : testCase.tx2.getStatements()) {
-            if (stmt.getType() != StatementType.BEGIN && stmt.getType() != StatementType.COMMIT) {
+            if (stmt.getType() != StatementType.BEGIN && stmt.getType() != StatementType.COMMIT
+                    && stmt.getType() != StatementType.ROLLBACK) {
                 stmtTypeMap.get(stmt.getType()).add(stmt);
             }
         }
-        OracleChecker oracleChecker = new MTOracleChecker();
+        OracleChecker oracleChecker;
+        if (TableTool.oracle.equals("MT")) {
+            oracleChecker = new MTOracleChecker();
+        } else {
+            oracleChecker = new DTOracleChecker();
+        }
+
         // 选择一个语句类型
         for (int i = 0; i < maxReduceCount; i++) {
             // 首先克隆一份testcase
             TestCase clonedTestCase = testCaseClone(testCase);
-            // TODO:然后按照顺序删除语句
-            deleteStatement(clonedTestCase);
-            System.out.println("删除后的测试用例：" + clonedTestCase.toString());
+            StatementCell delStmt = deleteStatement(clonedTestCase);
+            if (delStmt == null) {
+                break;
+            }
+            allReduceCount++;
             if (oracleChecker.hasBug(clonedTestCase.toString())) {
-                System.out.println("删除后仍能复现bug");
+                log.info("Statement [{}] del success", delStmt.toString());
                 // 删除后仍能复现bug则更新测试用例
                 testCase = clonedTestCase;
+                vaildReduceCount++;
+                stmtDelOrderSelector.updateWeight(delStmt.getType(), true);
+            } else {
+                log.info("Statement [{}] del failed", delStmt.toString());
+                stmtTypeFailMap.get(delStmt.getType()).add(delStmt);
+                stmtDelOrderSelector.updateWeight(delStmt.getType(), false);
             }
         }
         // 将测试用例转换为字符串输出
         String res = testCase.toString();
-        System.out.println(res);
         return res;
     }
 
-    private void deleteStatement(TestCase testCase) {
+    private StatementCell deleteStatement(TestCase testCase) {
         List<StatementType> excludedTypes = new ArrayList<>();
         // 遍历stmtTypeMap，将列表为空的类型加入excludedTypes
         for (Map.Entry<StatementType, ArrayList<StatementCell>> entry : stmtTypeMap.entrySet()) {
@@ -96,13 +150,15 @@ public class Reducer {
             }
         }
         StatementType type = stmtDelOrderSelector.selectNext(excludedTypes);
+        if (type == null) {
+            return null;
+        }
         ArrayList<StatementCell> stmts = stmtTypeMap.get(type);
         // System.out.println("待删除语句列表：" + stmts);
         // 随机抽取一个语句删除
         int idx = (int) (Math.random() * stmts.size());
         int txId = stmts.get(idx).getTx().getTxId();
         // 待删除语句
-        System.out.println("待删除语句：" + stmts.get(idx));
         if (txId == 1) {
             testCase.tx1.getStatements().remove(stmts.get(idx));
         } else if (txId == 2) {
@@ -113,7 +169,8 @@ public class Reducer {
         // 更新submittedOrder
         testCase.submittedOrder.remove(stmts.get(idx));
         // TODO: 目前不管本次删除是否合理，都将该语句从stmtTypeMap中删除，后续可以考虑删除失败的情况只对语句做标记。
-        stmts.remove(idx);
+        StatementCell delStmt = stmts.remove(idx);
+        return delStmt;
     }
 
     /*

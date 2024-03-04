@@ -13,7 +13,6 @@ import lombok.extern.slf4j.Slf4j;
 import troc.common.IgnoreMeException;
 import troc.mysql.ast.MySQLConstant;
 import troc.mysql.ast.MySQLConstant.MySQLNullConstant;
-import troc.reducer.Reducer;
 import troc.reducer.TestCase;
 
 @Slf4j
@@ -51,17 +50,45 @@ public class TrocChecker {
         testCase.submittedOrder = submittedOrder;
         if (!oracleCheck(submittedOrder) && TableTool.reducerSwitchOn) {
             log.info("Find a bug, start reducer");
-            Reducer reducer = new Reducer();
-            String res = reducer.reduce(testCase.toString());
-            log.info("Reducer result: \n{}", res);
+            String reducedCase = "";
+            switch (TableTool.reducerType) {
+                case "random":
+                    reducedCase = TableTool.randomReducer.reduce(testCase.toString());
+                    log.info("Random reducer result: \n{}", reducedCase);
+                    break;
+                case "probability-table":
+                    reducedCase = TableTool.probabilityTableReducer.reduce(testCase.toString());
+                    log.info("Probability-table reducer result: \n{}", reducedCase);
+                    break;
+                case "epsilon-greedy":
+                    reducedCase = TableTool.epsilonGreedyReducer.reduce(testCase.toString());
+                    log.info("Epsilon-greedy reducer result: \n{}", reducedCase);
+                    break;
+                case "all":
+                    reducedCase = TableTool.randomReducer.reduce(testCase.toString());
+                    log.info("Random reducer result: \n{}", reducedCase);
+                    reducedCase = TableTool.probabilityTableReducer.reduce(testCase.toString());
+                    log.info("Probability-table reducer result: \n{}", reducedCase);
+                    reducedCase = TableTool.epsilonGreedyReducer.reduce(testCase.toString());
+                    log.info("Epsilon-greedy reducer result: \n{}", reducedCase);
+                default:
+                    break;
+            }
         }
+        log.info(
+                "randomAllReduceCount:{}, randomVaildReduceCount:{}, probabilityTableAllReduceCount:{}, probabilityTableVaildReduceCount:{},epsilonGreedyAllReduceCount:{}, epsilonGreedyVaildReduceCount:{}",
+                TableTool.randomReducer.getAllReduceCount(), TableTool.randomReducer.getVaildReduceCount(),
+                TableTool.probabilityTableReducer.getAllReduceCount(),
+                TableTool.probabilityTableReducer.getVaildReduceCount(),
+                TableTool.epsilonGreedyReducer.getAllReduceCount(),
+                TableTool.epsilonGreedyReducer.getVaildReduceCount());
     }
 
-    public void checkRandom() {
-        checkRandom(TableTool.submittedOrderSampleCount);
+    public void checkRandom(TestCase testCase) {
+        checkRandom(TableTool.submittedOrderSampleCount, testCase);
     }
 
-    public void checkRandom(int count) {
+    public void checkRandom(int count, TestCase testCase) {
         // 随机抽样count种提交顺序
         ArrayList<ArrayList<StatementCell>> submittedOrderList = ShuffleTool.sampleSubmittedTrace(tx1, tx2, count);
         for (ArrayList<StatementCell> submittedOrder : submittedOrderList) {
@@ -70,7 +97,35 @@ public class TrocChecker {
             } catch (InterruptedException e) {
             }
             // check每一种提交顺序
+            testCase.submittedOrder = submittedOrder;
             boolean res = oracleCheck(submittedOrder);
+            if (!res && TableTool.reducerSwitchOn) {
+                log.info("Find a bug, start reducer");
+                String reducedCase = "";
+                switch (TableTool.reducerType) {
+                    case "random":
+                        reducedCase = TableTool.randomReducer.reduce(testCase.toString());
+                        log.info("Random reducer result: \n{}", reducedCase);
+                        break;
+                    case "probability-table":
+                        reducedCase = TableTool.probabilityTableReducer.reduce(testCase.toString());
+                        log.info("Probability-table reducer result: \n{}", reducedCase);
+                        break;
+                    case "epsilon-greedy":
+                        reducedCase = TableTool.epsilonGreedyReducer.reduce(testCase.toString());
+                        log.info("Epsilon-greedy reducer result: \n{}", reducedCase);
+                        break;
+                    case "all":
+                        reducedCase = TableTool.randomReducer.reduce(testCase.toString());
+                        log.info("Random reducer result: \n{}", reducedCase);
+                        reducedCase = TableTool.probabilityTableReducer.reduce(testCase.toString());
+                        log.info("Probability-table reducer result: \n{}", reducedCase);
+                        reducedCase = TableTool.epsilonGreedyReducer.reduce(testCase.toString());
+                        log.info("Epsilon-greedy reducer result: \n{}", reducedCase);
+                    default:
+                        break;
+                }
+            }
             if (TableTool.isFilterDuplicateBug && !res) {
                 // 同一个测试用例检测到的BUG都是一样的，一旦检测到直接停止本轮检测
                 break;
@@ -80,6 +135,13 @@ public class TrocChecker {
                     TableTool.txPair, TableTool.conflictTxPair, TableTool.allCase, TableTool.conflictCase,
                     TableTool.sematicCorrectCase, TableTool.DTTime, TableTool.CSTime, TableTool.MTTime,
                     TableTool.DTbugCase, TableTool.CSbugCase, TableTool.MTbugCase);
+            log.info(
+                    "randomAllReduceCount:{}, randomVaildReduceCount:{}, probabilityTableAllReduceCount:{}, probabilityTableVaildReduceCount:{},epsilonGreedyAllReduceCount:{}, epsilonGreedyVaildReduceCount:{}",
+                    TableTool.randomReducer.getAllReduceCount(), TableTool.randomReducer.getVaildReduceCount(),
+                    TableTool.probabilityTableReducer.getAllReduceCount(),
+                    TableTool.probabilityTableReducer.getVaildReduceCount(),
+                    TableTool.epsilonGreedyReducer.getAllReduceCount(),
+                    TableTool.epsilonGreedyReducer.getVaildReduceCount());
         }
     }
 
@@ -145,7 +207,11 @@ public class TrocChecker {
         TableTool.allCase++;
         log.info("Check new schedule:{}", schedule);
         // 将origin表复制到troc表
-        TableTool.recoverOriginalTable();
+        if (!TableTool.isReducer) {
+            TableTool.recoverOriginalTable();
+        } else {
+            TableTool.recoverTableFromSnapshot("reducer");
+        }
         bugInfo = "";
         // 1.正常执行的结果
         TxnPairExecutor executor1 = null;
@@ -179,11 +245,13 @@ public class TrocChecker {
 
         bugInfo = " -- DT Error \n";
         if (TableTool.options.isSetCase()) {
-            log.info("Schedule: " + schedule);
-            log.info("Input schedule: " + getScheduleInputStr(schedule));
-            log.info("Get execute result: " + execResult1);
-            log.info("DT oracle order: " + execResult2.getOrder());
-            log.info("DT oracle result: " + execResult2);
+            if (!TableTool.isReducer) {
+                log.info("Schedule: " + schedule);
+                log.info("Input schedule: " + getScheduleInputStr(schedule));
+                log.info("Get execute result: " + execResult1);
+                log.info("DT oracle order: " + execResult2.getOrder());
+                log.info("DT oracle result: " + execResult2);
+            }
             return compareOracles(execResult1, execResult2);
         }
         if (compareOracles(execResult1, execResult2)) {
@@ -382,14 +450,15 @@ public class TrocChecker {
             return false;
         }
         // stmt.view仅用于锁分析，对于需要加锁的语句来说都是当前读，例外是RC, RR下的update语句是半一致性读
-        if (curTx.isolationlevel == IsolationLevel.READ_UNCOMMITTED
-                || curTx.isolationlevel == IsolationLevel.READ_COMMITTED) {
-            // 半一致性读，读取到的是最新的提交数据
-            stmt.view = buildTxView(curTx, otherTx, false);
-        } else {
-            stmt.view = newestView();
-        }
-        // log.info("stmt {}, view: {}", stmt, stmt.view);
+        // if (curTx.isolationlevel == IsolationLevel.READ_UNCOMMITTED
+        // || curTx.isolationlevel == IsolationLevel.READ_COMMITTED) {
+        // // 半一致性读，读取到的是最新的提交数据
+        // stmt.view = buildTxView(curTx, otherTx, false);
+        // } else {
+        // stmt.view = newestView();
+        // }
+        stmt.view = newestView();
+        log.info("stmt {}, view: {}", stmt, stmt.view);
         // 锁分析
         Lock lock = TableTool.getLock(stmt);
         // log.info("lock: {}", lock.type);
@@ -572,6 +641,10 @@ public class TrocChecker {
         if (curTx.isolationlevel == IsolationLevel.REPEATABLE_READ) {
             // 可重复读下，事务1删除过的数据事务2可以再次删除/修改
             allView = newestView(curTx, true);
+        } else if (curTx.isolationlevel == IsolationLevel.READ_COMMITTED
+                || curTx.isolationlevel == IsolationLevel.READ_UNCOMMITTED) {
+            // UPDATE的时候采用已提交的最新数据进行评估
+            allView = buildTxView(curTx, otherTx, false);
         }
         // 获取影响行数的时候需要包含已删除的行
         HashSet<Integer> rowIds = getAffectedRows(stmt, allView);
@@ -764,9 +837,9 @@ public class TrocChecker {
                 constant = new MySQLNullConstant();
             } else {
                 constant = stmt.predicate.getExpectedValue(tupleMap);
-                // log.info("expression: {}", stmt.whereClause);
-                // log.info("tuple: {}", tupleMap);
-                // log.info("constant: {}", constant);
+                log.info("expression: {}", stmt.whereClause);
+                log.info("tuple: {}", tupleMap);
+                log.info("constant: {}", constant);
             }
             if (!constant.isNull() && constant.asBooleanNotNull()) {
                 // 加入结果集

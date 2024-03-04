@@ -98,20 +98,35 @@ public class StatementCell {
         // 还需要解析select columns
         if (this.type == StatementType.SELECT) {
             this.selectedColumns = new ArrayList<>();
-            String[] parts = this.statement.split(" ");
-            int fromIdx = -1;
-            for (int i = 0; i < parts.length; i++) {
-                if (parts[i].equals("FROM")) {
-                    fromIdx = i;
-                    break;
-                }
+            // 截取SELECT到FROM之间的子串
+            Pattern pattern1 = Pattern.compile("SELECT\\s+(.*?)\\s+FROM", Pattern.CASE_INSENSITIVE);
+            Matcher matcher = pattern1.matcher(this.statement);
+            String substring = "";
+            if (matcher.find()) {
+                substring = matcher.group(1);
+                System.out.println("Substring between SELECT and FROM: " + substring);
+            } else {
+                System.out.println("No match found.");
             }
-            if (fromIdx == -1) {
-                throw new RuntimeException("Invalid select statement: " + this.statement);
+            Pattern pattern2 = Pattern.compile("\\b\\w+\\b");
+            Matcher matcher2 = pattern2.matcher(substring);
+            while (matcher2.find()) {
+                this.selectedColumns.add(matcher2.group());
             }
-            for (int i = 1; i < fromIdx; i++) {
-                this.selectedColumns.add(parts[i]);
-            }
+            // String[] parts = this.statement.split(" ");
+            // int fromIdx = -1;
+            // for (int i = 0; i < parts.length; i++) {
+            // if (parts[i].equals("FROM")) {
+            // fromIdx = i;
+            // break;
+            // }
+            // }
+            // if (fromIdx == -1) {
+            // throw new RuntimeException("Invalid select statement: " + this.statement);
+            // }
+            // for (int i = 1; i < fromIdx; i++) {
+            // this.selectedColumns.add(parts[i]);
+            // }
             // log.info("Selected columns: {}", this.selectedColumns.toString());
         }
         if (("ALL".equals(TableTool.oracle) || "CS".equals(TableTool.oracle)) && this.whereClause != null
