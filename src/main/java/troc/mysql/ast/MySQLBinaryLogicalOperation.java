@@ -72,7 +72,8 @@ public class MySQLBinaryLogicalOperation implements MySQLExpression {
         public abstract MySQLConstant apply(MySQLConstant left, MySQLConstant right);
 
         public static MySQLBinaryLogicalOperator getRandom() {
-            return Randomly.fromOptions(values());
+            // return Randomly.fromOptions(values());
+            return values()[0];
         }
     }
 
