@@ -458,7 +458,7 @@ public class TrocChecker {
         // stmt.view = newestView();
         // }
         stmt.view = newestView();
-        log.info("stmt {}, view: {}", stmt, stmt.view);
+        // log.info("stmt {}, view: {}", stmt, stmt.view);
         // 锁分析
         Lock lock = TableTool.getLock(stmt);
         // log.info("lock: {}", lock.type);
