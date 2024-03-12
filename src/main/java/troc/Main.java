@@ -42,8 +42,8 @@ public class Main {
         // MySQLExpression expression = new MySQLBinaryOperation(constant1, constant2,
         // MySQLBinaryOperator.XOR);
         // create a CharStream that reads from standard input
-        
-        String input = "((((-938408960) BETWEEN (c5) AND (c2)) NOT IN (CAST(-1354539628 AS SIGNED), c0, -714631084)) && (((- (NULL))) IS NOT TRUE)) & (CAST(c3 AS SIGNED))";
+         
+        String input = "((- (c1))) NOT IN (CAST(((353686180) NOT IN (c0, 1266854665, 603312483)) XOR ((c2) IS NOT UNKNOWN) AS SIGNED), (((+ (c1))) IS NULL) IS NOT FALSE, (((c0) IS NOT FALSE) IN ((-1032203753) IN (-2049464461), c2)) XOR (((1552624276) BETWEEN (c2) AND (c2)) IS NOT UNKNOWN))";
         // create a lexer that feeds off of input CharStream
         MySQLExpressionLexer lexer = new MySQLExpressionLexer(CharStreams.fromString(input));
         // create a buffer of tokens pulled from the lexer

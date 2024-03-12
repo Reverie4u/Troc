@@ -50,7 +50,10 @@ public class MySQLExpressionVisitorImpl extends MySQLExpressionBaseVisitor<MySQL
         } else if (ctx.IS() != null && ctx.literal().FALSE_LITERAL()!= null){
             boolean isTrue = ctx.NOT() != null;
             return new MySQLUnaryPostfixOperation(visit(ctx.expression(0)), UnaryPostfixOperator.IS_FALSE, isTrue);
-        }else if (ctx.IS() != null && ctx.literal().NULL_LITERAL()!= null){
+        } else if (ctx.IS() != null && ctx.literal().NULL_LITERAL()!= null){
+            boolean isTrue = ctx.NOT() != null;
+            return new MySQLUnaryPostfixOperation(visit(ctx.expression(0)), UnaryPostfixOperator.IS_NULL, isTrue);
+        } else if(ctx.IS() != null && ctx.literal().UNKNOWN_LITERAL() != null){
             boolean isTrue = ctx.NOT() != null;
             return new MySQLUnaryPostfixOperation(visit(ctx.expression(0)), UnaryPostfixOperator.IS_NULL, isTrue);
         }
@@ -89,7 +92,9 @@ public class MySQLExpressionVisitorImpl extends MySQLExpressionBaseVisitor<MySQL
             return new MySQLBinaryComparisonOperation(visit(ctx.expression(0)), visit(ctx.expression(1)), BinaryComparisonOperator.GREATER);
         } else if(ctx.GREATER_EQUALS()!=null){
             return new MySQLBinaryComparisonOperation(visit(ctx.expression(0)), visit(ctx.expression(1)), BinaryComparisonOperator.GREATER_EQUALS);
-        }          
+        } else if(ctx.LIKE() != null){
+            return new MySQLBinaryComparisonOperation(visit(ctx.expression(0)), visit(ctx.expression(1)), BinaryComparisonOperator.LIKE);
+        }        
         // 括号运算
         else if (ctx.LEFT_BRACKET() != null) {
             return visit(ctx.expression(0));
@@ -128,6 +133,8 @@ public class MySQLExpressionVisitorImpl extends MySQLExpressionBaseVisitor<MySQL
         } else if (ctx.FALSE_LITERAL() != null) {
             return new MySQLIntConstant(0);
         } else if (ctx.NULL_LITERAL() != null){
+            return new MySQLNullConstant();
+        } else if (ctx.UNKNOWN_LITERAL() != null){
             return new MySQLNullConstant();
         }
          else {
