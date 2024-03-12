@@ -6,10 +6,17 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Scanner;
 
+import org.antlr.v4.runtime.CharStreams;
+import org.antlr.v4.runtime.CommonTokenStream;
+import org.antlr.v4.runtime.tree.ParseTree;
+
 import com.beust.jcommander.JCommander;
 
 import lombok.extern.slf4j.Slf4j;
 import troc.common.Table;
+import troc.mysql.ast.MySQLExpression;
+import troc.mysql.visitor.MySQLExpressionVisitorImpl;
+import troc.mysql.visitor.MySQLVisitor;
 
 @Slf4j
 public class Main {
@@ -34,26 +41,43 @@ public class Main {
         // MySQLExpression constant2 = new MySQLStringConstant("0.5");
         // MySQLExpression expression = new MySQLBinaryOperation(constant1, constant2,
         // MySQLBinaryOperator.XOR);
-
-        // // 求解expression
+        // create a CharStream that reads from standard input
+        
+        String input = "((((-938408960) BETWEEN (c5) AND (c2)) NOT IN (CAST(-1354539628 AS SIGNED), c0, -714631084)) && (((- (NULL))) IS NOT TRUE)) & (CAST(c3 AS SIGNED))";
+        // create a lexer that feeds off of input CharStream
+        MySQLExpressionLexer lexer = new MySQLExpressionLexer(CharStreams.fromString(input));
+        // create a buffer of tokens pulled from the lexer
+        CommonTokenStream tokens = new CommonTokenStream(lexer);
+        // create a parser that feeds off the tokens buffer
+        MySQLExpressionParser parser = new MySQLExpressionParser(tokens);
+        // 这里得到的ParseTree是通用AST
+        ParseTree tree = parser.expression(); // begin parsing at expression rule
+        MySQLExpressionVisitorImpl visitor = new MySQLExpressionVisitorImpl();
+        
+        // 通过调用visit函数将通用AST转换成自定义AST，自定义AST中的节点类型都是预定义好的
+        // 这个地方可以调试看MySQLExpression的结构
+        MySQLExpression expression = visitor.visit(tree);
+        System.out.println(MySQLVisitor.asString(expression));
+        // 求解expression
         // MySQLExpression result = expression.getExpectedValue(null);
 
-        Options options = new Options();
-        JCommander jCmd = new JCommander();
-        jCmd.addObject(options);
-        jCmd.parse(args);
-        verifyOptions(options);
-        log.info(String.format("Run tests for %s in [DB %s]-[Table %s] on [%s:%d]",
-                options.getDBMS(), options.getDbName(), options.getTableName(),
-                options.getHost(), options.getPort()));
+        // Options options = new Options();
+        // JCommander jCmd = new JCommander();
+        // jCmd.addObject(options);
+        // jCmd.parse(args);
+        // verifyOptions(options);
+        // log.info(String.format("Run tests for %s in [DB %s]-[Table %s] on [%s:%d]",
+        //         options.getDBMS(), options.getDbName(), options.getTableName(),
+        //         options.getHost(), options.getPort()));
 
-        txnTesting(options);
-        TableTool.cleanTrocTables();
+        // txnTesting(options);
+        // TableTool.cleanTrocTables(); 
     }
 
     private static void txnTesting(Options options) {
         TableTool.initialize(options);
         Transaction tx1, tx2;
+        
         if (options.isSetCase()) {
             // 从文件或命令行读取事务
             Scanner scanner;
