@@ -1,9 +1,13 @@
 package troc.reducer;
 
+import java.sql.SQLException;
+
+import lombok.extern.slf4j.Slf4j;
 import troc.StatementCell;
 import troc.TableTool;
 import troc.TrocChecker;
 
+@Slf4j
 public class DTOracleChecker implements OracleChecker {
     @Override
     public boolean hasBug(TestCase tc) {
@@ -18,6 +22,15 @@ public class DTOracleChecker implements OracleChecker {
         TableTool.preProcessTable();
         boolean res = checker.oracleCheck(tc.submittedOrder);
         TableTool.isReducer = false;
+        try {
+            tc.tx1.getConn().close();
+            tc.tx1.getRefConn().close();
+            tc.tx2.getConn().close();
+            tc.tx2.getRefConn().close();
+        } catch (SQLException e) {
+            log.info("Close connection failed.");
+            e.printStackTrace();
+        }
         return !res;
     }
 
