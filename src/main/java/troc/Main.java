@@ -95,11 +95,16 @@ public class Main {
                     throw new RuntimeException("Read case from file failed: ", e);
                 }
             }
+            Table table = TableTool.dbms.buildTable(options.getTableName());
             TestCase testCase = new TestCase();
             // 执行文件中或命令行输入的建表语句
-            TableTool.prepareTableFromScanner(scanner, testCase);
+            TableTool.prepareTableFromScanner(scanner, table);
             // 对表进行预处理
             TableTool.preProcessTable();
+            testCase.createStmt = new StatementCell(null, -1, table.getCreateTableSql());
+            for (String sql : table.getInitializeStatements()) {
+                testCase.prepareTableStmts.add(new StatementCell(new Transaction(0), -1, sql));
+            }
             log.info("Initial table:\n{}", TableTool.tableToView());
             // 读取两个事务
             tx1 = TableTool.readTransactionFromScanner(scanner, 1);

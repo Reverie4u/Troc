@@ -29,6 +29,10 @@ public abstract class Table {
     protected ExprGen exprGenerator;
     protected int initRowCount = 0;
 
+    public void setCreateTableSql(String createTableSql) {
+        this.createTableSql = createTableSql;
+    }
+
     public Table(String tableName) {
         this.tableName = tableName;
         this.allPrimaryKey = Randomly.getBoolean();

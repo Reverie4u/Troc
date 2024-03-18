@@ -30,6 +30,7 @@ public class StatementCell {
     String wherePrefix = "";
     String whereClause = "";
     String forPostfix = "";
+    // 用于存储insert语句中的values或者update语句中的set values
     HashMap<String, String> values = new HashMap<>();
     boolean blocked;
     boolean aborted;
@@ -39,8 +40,6 @@ public class StatementCell {
     String exceptionMessage = "";
     MySQLExpression predicate;
     List<String> selectedColumns;
-    Map<String, String> setMap;
-    Map<String, String> insertMap;
     static MySQLExpressionVisitorImpl visitor = new MySQLExpressionVisitorImpl();
 
     public StatementType getType() {
@@ -68,33 +67,6 @@ public class StatementCell {
             return;
         }
         this.parseStatement();
-        // 还需要解析update set columns
-        if (this.type == StatementType.UPDATE) {
-            this.setMap = new HashMap<>();
-            String[] parts = this.statement.split(" ");
-            int setIdx = -1;
-            for (int i = 0; i < parts.length; i++) {
-                if (parts[i].equals("SET")) {
-                    setIdx = i;
-                    break;
-                }
-            }
-            if (setIdx == -1) {
-                throw new RuntimeException("Invalid update statement: " + this.statement);
-            }
-            int whereIdx = -1;
-            for (int i = setIdx + 1; i < parts.length; i++) {
-                if (parts[i].equals("WHERE")) {
-                    whereIdx = i;
-                    break;
-                }
-            }
-            if (whereIdx == -1) {
-                whereIdx = parts.length;
-            }
-            setMap.put(parts[setIdx + 1], parts[whereIdx - 1]);
-            // log.info("Set columns: {}", this.setMap.toString());
-        }
         // 还需要解析select columns
         if (this.type == StatementType.SELECT) {
             this.selectedColumns = new ArrayList<>();
@@ -103,31 +75,17 @@ public class StatementCell {
             Matcher matcher = pattern1.matcher(this.statement);
             String substring = "";
             if (matcher.find()) {
-                substring = matcher.group(1);
-                System.out.println("Substring between SELECT and FROM: " + substring);
+                substring = matcher.group(1).trim();
+            }
+            if ("*".equals(substring)) {
+                this.selectedColumns = TableTool.getColNames();
             } else {
-                System.out.println("No match found.");
+                Pattern pattern2 = Pattern.compile("\\b\\w+\\b");
+                Matcher matcher2 = pattern2.matcher(substring);
+                while (matcher2.find()) {
+                    this.selectedColumns.add(matcher2.group());
+                }
             }
-            Pattern pattern2 = Pattern.compile("\\b\\w+\\b");
-            Matcher matcher2 = pattern2.matcher(substring);
-            while (matcher2.find()) {
-                this.selectedColumns.add(matcher2.group());
-            }
-            // String[] parts = this.statement.split(" ");
-            // int fromIdx = -1;
-            // for (int i = 0; i < parts.length; i++) {
-            // if (parts[i].equals("FROM")) {
-            // fromIdx = i;
-            // break;
-            // }
-            // }
-            // if (fromIdx == -1) {
-            // throw new RuntimeException("Invalid select statement: " + this.statement);
-            // }
-            // for (int i = 1; i < fromIdx; i++) {
-            // this.selectedColumns.add(parts[i]);
-            // }
-            // log.info("Selected columns: {}", this.selectedColumns.toString());
         }
         if (("ALL".equals(TableTool.oracle) || "CS".equals(TableTool.oracle)) && this.whereClause != null
                 && !this.whereClause.isEmpty()) {
@@ -147,7 +105,6 @@ public class StatementCell {
         this.statement = statement.replace(";", "");
         this.type = StatementType.valueOf(this.statement.split(" ")[0]);
         this.parseStatement();
-        this.insertMap = insertMap;
     }
 
     public StatementCell(Transaction tx, int statementId, String statement, MySQLExpression predicate,
@@ -158,7 +115,6 @@ public class StatementCell {
         this.type = StatementType.valueOf(this.statement.split(" ")[0]);
         this.parseStatement();
         this.predicate = predicate;
-        this.setMap = setMap;
     }
 
     public StatementCell(Transaction tx, int statementId, String statement, MySQLExpression predicate) {
@@ -176,9 +132,7 @@ public class StatementCell {
         this.statementId = statementId;
         this.statement = statement.replace(";", "");
         this.type = StatementType.valueOf(this.statement.split(" ")[0]);
-        log.info("before parse: {}", this.statement);
         this.parseStatement();
-        log.info("after parse: {}", this.statement);
         this.predicate = predicate;
         this.selectedColumns = selectedColumns;
     }
@@ -219,7 +173,7 @@ public class StatementCell {
                         whereIdx = stmt.indexOf(" WHERE ");
                         String setPairsStr;
                         if (whereIdx == -1) {
-                            setPairsStr = stmt.substring(setIdx);
+                            setPairsStr = stmt.substring(setIdx + 5);
                         } else {
                             setPairsStr = stmt.substring(setIdx + 5, whereIdx);
                         }
@@ -248,22 +202,38 @@ public class StatementCell {
                     recomputeStatement();
                     break;
                 case INSERT:
-                    Pattern pattern = Pattern.compile("INTO\\s+t\\s*\\((.*?)\\) VALUES\\s*\\((.*?)\\)");
+                    // 只支持insert单个元组
+                    Pattern pattern = Pattern.compile("INTO\\s+t\\s*(\\((.*?)\\))?\\s*VALUES\\s*\\((.*?)\\)");
                     Matcher matcher = pattern.matcher(this.statement);
                     if (!matcher.find()) {
-                        throw new RuntimeException("parse INSERT statement failed");
+                        // 格式错误
+                        throw new RuntimeException("unsupported synatx: " + this.statement);
                     }
-                    String[] cols = matcher.group(1).split(",\\s*");
-                    String[] vals = matcher.group(2).split(",\\s*");
-                    if (cols.length != vals.length) {
-                        throw new RuntimeException("Parse insert statement failed: " + this.statement);
+                    String cols = matcher.group(2);
+                    ArrayList<String> colList = new ArrayList<>();
+                    ArrayList<String> valList = new ArrayList<>();
+                    if (cols == null) {
+                        colList = TableTool.getColNames();
+                    } else {
+                        String[] colArr = cols.split(",");
+                        for (String col : colArr) {
+                            colList.add(col.trim());
+                        }
                     }
-                    for (int i = 0; i < cols.length; i++) {
-                        String val = vals[i];
+                    String vals = matcher.group(3);
+                    String[] valArr = vals.split(",");
+                    for (String val : valArr) {
+                        valList.add(val.trim());
+                    }
+                    if (colList.size() != valList.size()) {
+                        throw new RuntimeException("wrong values count: " + this.statement);
+                    }
+                    for (int i = 0; i < colList.size(); i++) {
+                        String val = valList.get(i);
                         if (val.startsWith("\"") && val.endsWith("\"")) {
                             val = val.substring(1, val.length() - 1);
                         }
-                        this.values.put(cols[i], val);
+                        this.values.put(colList.get(i), val);
                     }
                     break;
                 default:
@@ -376,8 +346,6 @@ public class StatementCell {
         // 共享引用，因为predicate不会再修改了
         copy.predicate = predicate;
         copy.selectedColumns = selectedColumns;
-        copy.setMap = setMap;
-        copy.insertMap = insertMap;
         return copy;
     }
 

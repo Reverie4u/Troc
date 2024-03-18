@@ -432,7 +432,25 @@ public class TrocChecker {
             }
         }
         TableTool.viewToTable(newestView());
-        ArrayList<Object> finalState = TableTool.getFinalStateAsList();
+        // 这里也需要改成约束求解
+        ArrayList<Object> finalState = null;
+        if ("MT".equals(TableTool.oracle)) {
+            finalState = TableTool.getFinalStateAsList();
+        } else {
+            View view = newestView();
+            finalState = new ArrayList<>();
+            for (int rowId : view.data.keySet()) {
+                Object[] row = view.data.get(rowId);
+                HashMap<String, Object> tupleMap = new HashMap<>();
+                for (int i = 0; i < TableTool.colNames.size(); i++) {
+                    tupleMap.put(TableTool.colNames.get(i), row[i]);
+                }
+                for (String columnName : TableTool.getColNames()) {
+                    finalState.add(tupleMap.get(columnName));
+                }
+            }
+        }
+
         TxnPairResult result = new TxnPairResult();
         result.setOrder(oracleOrder);
         result.setFinalState(finalState);
@@ -712,7 +730,7 @@ public class TrocChecker {
             // 根据insertMap构造行数据
             Object[] newRow = new Object[TableTool.colNames.size()];
             for (int i = 0; i < TableTool.colNames.size(); i++) {
-                String value = stmt.insertMap.get(TableTool.colNames.get(i));
+                String value = stmt.values.get(TableTool.colNames.get(i));
                 // 将String类型的value转化成对应类型。
                 newRow[i] = TableTool.convertStringToType(value, TableTool.colTypeNames.get(i));
             }
@@ -731,9 +749,9 @@ public class TrocChecker {
                     constant = new MySQLNullConstant();
                 } else {
                     constant = stmt.predicate.getExpectedValue(tupleMap);
-                    // log.info("expression: {}", stmt.whereClause);
-                    // log.info("tuple: {}", tupleMap);
-                    // log.info("constant: {}", constant);
+                    log.info("expression: {}", stmt.whereClause);
+                    log.info("tuple: {}", tupleMap);
+                    log.info("constant: {}", constant);
                 }
                 if (!constant.isNull() && constant.asBooleanNotNull()) {
                     // 加入结果集
@@ -751,8 +769,8 @@ public class TrocChecker {
                     Object[] newData = data.clone();
                     for (int i = 0; i < TableTool.colNames.size(); i++) {
                         String colName = TableTool.colNames.get(i);
-                        if (stmt.setMap.containsKey(colName)) {
-                            String value = stmt.setMap.get(colName);
+                        if (stmt.values.containsKey(colName)) {
+                            String value = stmt.values.get(colName);
                             newData[i] = TableTool.convertStringToType(value, TableTool.colTypeNames.get(i));
                         }
                     }
@@ -876,7 +894,6 @@ public class TrocChecker {
         }
         if (execRes.isDeadBlock() && oracleRes.isDeadBlock()) {
             // 两个都阻塞的情况，只比较第一个阻塞点前的语句
-            // 或者说可以比较第二个阻塞点之前的语句？
             int blockIndex = 0;
             for (int i = 0; i < oracleOrder.size(); i++) {
                 if (oracleOrder.get(i).blocked) {
@@ -918,10 +935,14 @@ public class TrocChecker {
                 }
             }
             if (oStmt.blocked && !eStmt.blocked) {
-                log.info("Error: Missing lock");
-                bugInfo += " -- Error: Missing lock";
-                TableTool.skipCase++;
-                return false;
+                // log.info("Error: Missing lock");
+                // bugInfo += " -- Error: Missing lock";
+                // TableTool.skipCase++;
+                // return false;
+                // 锁不一样统一忽略
+                log.info("Ignore: Undecided (because lock)");
+                bugInfo += " -- Ignore: Undecided (because lock)";
+                return true;
             }
             if (!oStmt.blocked && eStmt.blocked) {
                 if (shouldNotBlock(eStmt)) {

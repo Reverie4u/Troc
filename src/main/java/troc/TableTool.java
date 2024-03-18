@@ -24,7 +24,6 @@ import troc.mysql.ast.MySQLUnaryPostfixOperation;
 import troc.mysql.ast.MySQLUnaryPrefixOperation;
 import troc.mysql.ast.MySQLUnaryPrefixOperation.MySQLUnaryPrefixOperator;
 import troc.reducer.Reducer;
-import troc.reducer.TestCase;
 
 @Slf4j
 public class TableTool {
@@ -88,6 +87,10 @@ public class TableTool {
     static public Reducer probabilityTableReducer;
     static public Reducer epsilonGreedyReducer;
     static public int maxReduceCount = 5;
+
+    public static ArrayList<String> getColNames() {
+        return colNames;
+    }
 
     static void initialize(Options options) {
         refMap = new HashMap<>();
@@ -185,18 +188,18 @@ public class TableTool {
         return new SQLConnection(con);
     }
 
-    static void prepareTableFromScanner(Scanner input, TestCase testCase) {
+    static void prepareTableFromScanner(Scanner input, Table table) {
         // 删除掉troc表，如果存在的话
         TableTool.executeOnTable("DROP TABLE IF EXISTS " + TableName);
         String sql;
         sql = input.nextLine();
-        testCase.createStmt = new StatementCell(null, -1, sql);
+        table.setCreateTableSql(sql);
         TableTool.executeOnTable(sql);
         do {
             sql = input.nextLine();
             if (sql.equals(""))
                 break;
-            testCase.prepareTableStmts.add(new StatementCell(new Transaction(0), -1, sql));
+            table.getInitializeStatements().add(sql);
             TableTool.executeOnTable(sql);
         } while (true);
     }
@@ -409,7 +412,7 @@ public class TableTool {
         Object[] row = new Object[ColCount - 1];
         log.info("insert sql: {}", s1.statement);
         log.info("other sql: {}", s2.statement);
-        s1.insertMap.forEach((k, v) -> {
+        s1.values.forEach((k, v) -> {
             int idx = colNames.indexOf(k);
             log.info("convert to type {}", colTypeNames.get(idx));
             row[idx] = convertStringToType(v, colTypeNames.get(idx));
