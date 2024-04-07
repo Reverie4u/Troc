@@ -6,8 +6,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
 
+import lombok.val;
 import lombok.extern.slf4j.Slf4j;
 import troc.IsolationLevel;
+import troc.Randomly;
 import troc.StatementCell;
 import troc.StatementType;
 import troc.TableTool;
@@ -84,6 +86,7 @@ public class Reducer {
     }
 
     public String reduce(String tc) {
+        // *删除语句层*
         // stmtTypeMap和stmtTypeFailMap需要清空
         for (Map.Entry<StatementType, ArrayList<StatementCell>> entry : stmtTypeMap.entrySet()) {
             entry.getValue().clear();
@@ -114,7 +117,7 @@ public class Reducer {
         } else {
             oracleChecker = new DTOracleChecker();
         }
-
+          
         // 选择一个语句类型
         for (int i = 0; i < maxReduceCount; i++) {
             // 首先克隆一份testcase
@@ -136,11 +139,542 @@ public class Reducer {
                 stmtDelOrderSelector.updateWeight(delStmt.getType(), false);
             }
         }
+        // *语句简化层*
+        // 简化表定义     
+        testCase = simplifyTable(testCase, oracleChecker);
+        // 删除插入列 
+        testCase = delInsertCol(testCase, oracleChecker);
+        // 删除更新列
+        testCase = delUpdateCol(testCase, oracleChecker);
+        // 删除表达式
+        testCase = delWhereClause(testCase,oracleChecker);
         // 将测试用例转换为字符串输出
         String res = testCase.toString();
+        System.out.println(res);
         return res;
     }
+    private TestCase delWhereClause(TestCase testCase, OracleChecker oracleChecker){
+        // 函数只有for()里的集合不一样
+        testCase = delWhereClauseTx1(testCase, oracleChecker);
+        testCase = delWhereClauseTx2(testCase, oracleChecker);
+        return testCase;
+    }
+    private TestCase delInsertCol(TestCase testCase, OracleChecker oracleChecker){
+        // 函数只有for()里的集合不一样
+        testCase = delInsertColPre(testCase, oracleChecker);
+        testCase = delInsertColTx1(testCase, oracleChecker);
+        testCase = delInsertColTx2(testCase, oracleChecker);
+        return testCase;
+    }
+    private TestCase delUpdateCol(TestCase testCase, OracleChecker oracleChecker){
+        // 两个函数只有for()里的集合不一样
+        testCase = delUpdateColTx1(testCase, oracleChecker);
+        testCase = delUpdateColTx2(testCase, oracleChecker);
+        return testCase;
+    }
+    private TestCase simplifyTable(TestCase testCase, OracleChecker oracleChecker){
+        TestCase clonedTestCase = testCaseClone(testCase);
+        String createSQL = clonedTestCase.createStmt.getStatement();
+        // 找到")"位置然后将后面的表定义替换掉
+        int rightBracketIdx = createSQL.lastIndexOf(")");
+        clonedTestCase.createStmt.setStmt(createSQL.substring(0, rightBracketIdx)+");");
+     //   System.out.println(clonedTestCase.createStmt.getStatement());
 
+        if (oracleChecker.hasBug(clonedTestCase.toString())) {
+            log.info("createSQL simpilify success");
+            // 删除后仍能复现bug则更新测试用例
+            testCase = testCaseClone(clonedTestCase); 
+        } else {
+            log.info("createSQL simpilify failed");
+        }
+        return testCase;
+    }
+    private TestCase delWhereClauseTx1(TestCase testCase, OracleChecker oracleChecker){
+        TestCase clonedTestCase = testCaseClone(testCase);
+        for(StatementCell whereCell : clonedTestCase.tx1.getStatements()){
+            if(whereCell.getWhereClause() != ""){
+              //  StatementCell whereCellCopy = whereCell.copy();
+                StringBuffer delWhereClause = new StringBuffer();
+                delWhereClause.append(whereCell.getWherePrefix());
+                delWhereClause.append(whereCell.getForPostFix());
+                // 删除事务Tx1语句中where部分以及Predicate谓词
+                whereCell.setStmt(delWhereClause.toString());
+                whereCell.setPredicate(null);
+                whereCell.setWhereClause("");
+                
+                if (oracleChecker.hasBug(clonedTestCase.toString())) {
+                    log.info("whereSQL [{}] simpilify success",whereCell.getStatement().toString());
+                    // 删除后仍能复现bug则更新测试用例
+                    testCase = testCaseClone(clonedTestCase); 
+                } else {
+                    log.info("whereSQL [{}] simpilify failed",whereCell.getStatement().toString());
+                }
+            }
+        }
+        return testCase;
+    }
+    private TestCase delWhereClauseTx2(TestCase testCase, OracleChecker oracleChecker){
+        TestCase clonedTestCase = testCaseClone(testCase);
+        for(StatementCell whereCell : clonedTestCase.tx2.getStatements()){
+            if(whereCell.getWhereClause() != ""){
+              //  StatementCell whereCellCopy = whereCell.copy();
+                StringBuffer delWhereClause = new StringBuffer();
+                delWhereClause.append(whereCell.getWherePrefix());
+                delWhereClause.append(whereCell.getForPostFix());
+                // 删除事务Tx2语句中where部分以及Predicate谓词
+                whereCell.setStmt(delWhereClause.toString());
+                whereCell.setPredicate(null);
+                whereCell.setWhereClause("");
+                
+                if (oracleChecker.hasBug(clonedTestCase.toString())) {
+                    log.info("whereSQL [{}] simpilify success",whereCell.getStatement().toString());
+                    // 删除后仍能复现bug则更新测试用例
+                    testCase = testCaseClone(clonedTestCase); 
+                } else {
+                    log.info("whereSQL [{}] simpilify failed",whereCell.getStatement().toString());
+                }
+            }
+        }
+        return testCase;
+    }
+    private TestCase delInsertColPre(TestCase testCase, OracleChecker oracleChecker){
+        TestCase clonedTestCase = testCaseClone(testCase);
+        for (StatementCell insertCell : clonedTestCase.prepareTableStmts){
+            if (insertCell.getType() == StatementType.INSERT){
+                StatementCell insertCellCopy = insertCell.copy();
+                String insertStmt = insertCellCopy.getStatement();
+                // 取得列名括号对和值括号对的位置
+                int columnLeftBracket = insertStmt.indexOf("(");
+                int columnRightBracket = insertStmt.indexOf(")");
+                int valueLeftBracket = insertStmt.lastIndexOf("(");
+                int valueRightBracket = insertStmt.lastIndexOf(")");
+                // 得到插入列
+                String columnStr = insertStmt.substring(columnLeftBracket+1, columnRightBracket);
+                String[] columnWords = columnStr.split(",");
+                // 得到插入值
+                String valueStr = insertStmt.substring(valueLeftBracket+1, valueRightBracket);
+                String[] valueWords = valueStr.split(",");
+                // 如果只有一列就不删了
+                if(columnWords.length == 1) continue;
+                // 剩下的都是至少两列插入，随机选择一列删除
+                int idx = Randomly.getNextInt(0,columnWords.length-1);
+                StringBuffer newColumnStr = new StringBuffer();
+                StringBuffer newValueStr  = new StringBuffer();
+                for(int i=0, cntVal=0, cntCol=0, cnt=0; i<columnWords.length; i++){
+                    // 不补null的
+                    if(i==idx && idx ==0) continue;
+                    else if(i!=idx && idx!=0){
+                        if(i==0){
+                            newValueStr.append(valueWords[i]);
+                            newColumnStr.append(columnWords[i]);
+                        }
+                        else{
+                            newValueStr.append(","+valueWords[i]);
+                            newColumnStr.append(","+columnWords[i]);
+                        }
+                    }else if(i!=idx && idx==0){
+                        if(cnt==0){
+                            newValueStr.append(valueWords[i].substring(1));
+                            newColumnStr.append(columnWords[i].substring(1));
+                            cnt++;
+                        }
+                        else{
+                            newValueStr.append(","+valueWords[i]);
+                            newColumnStr.append(","+columnWords[i]);
+                            cnt++;
+                        }
+                    }
+                    /*  补null的
+                    if(i==idx && idx==0){
+                        newValueStr.append("null");
+                        cntVal++;
+                    }
+                    else if(i==idx && idx!=0){
+                        newValueStr.append(", null");
+                        cntVal++;
+                    }
+                    else if(i!=idx && idx !=0){
+                        if(cntCol==0 && cntVal == 0){
+                            newValueStr.append(valueWords[i]);
+                            newColumnStr.append(columnWords[i]);
+                            cntVal++;
+                            cntCol++;
+                        }
+                        else if(cntCol!=0){
+                            newValueStr.append(","+valueWords[i]);
+                            newColumnStr.append(","+columnWords[i]);
+                            cntVal++;
+                            cntCol++;
+                        }
+                    }
+                    else if(i!=idx && idx == 0){
+                        if(cntCol==0){
+                            newValueStr.append(","+valueWords[i]);
+                            newColumnStr.append(columnWords[i].substring(1));
+                            cntVal++;
+                            cntCol++;
+                        }
+                        else if(cntCol!=0){
+                            newValueStr.append(","+valueWords[i]);
+                            newColumnStr.append(","+columnWords[i]);
+                            cntVal++;
+                            cntCol++;
+                        }
+                    }*/
+                }
+                StringBuffer newInsertStmt = new StringBuffer();
+                // 将去掉某一列后的column列和value列与原先句子进行拼接 Pre里INSERT句子最后加个";"，事务里不需要
+                newInsertStmt.append(insertStmt.substring(0, columnLeftBracket+1));
+                newInsertStmt.append(newColumnStr.toString());
+                newInsertStmt.append(insertStmt.substring(columnRightBracket, valueLeftBracket+1));                                          
+                newInsertStmt.append(newValueStr.toString());
+                newInsertStmt.append(insertStmt.substring(valueRightBracket)+";");
+                
+                insertCell.setStmt(newInsertStmt.toString());
+
+                if (oracleChecker.hasBug(clonedTestCase.toString())) {
+                    log.info("insertSQL [{}] simpilify success",insertCell.getStatement().toString());
+                    // 删除后仍能复现bug则更新测试用例
+                    testCase = testCaseClone(clonedTestCase); 
+                } else {
+                    log.info("insertSQL [{}] simpilify failed",insertCell.getStatement().toString());
+                }
+            }
+            
+        }
+        return testCase;
+    }
+    private TestCase delInsertColTx1(TestCase testCase, OracleChecker oracleChecker){
+        TestCase clonedTestCase = testCaseClone(testCase);
+        for (StatementCell insertCell : clonedTestCase.tx1.getStatements()){
+            if (insertCell.getType() == StatementType.INSERT){
+                StatementCell insertCellCopy = insertCell.copy();
+                String insertStmt = insertCellCopy.getStatement();
+                // 取得列名括号对和值括号对的位置
+                int columnLeftBracket = insertStmt.indexOf("(");
+                int columnRightBracket = insertStmt.indexOf(")");
+                int valueLeftBracket = insertStmt.lastIndexOf("(");
+                int valueRightBracket = insertStmt.lastIndexOf(")");
+                // 得到插入列
+                String columnStr = insertStmt.substring(columnLeftBracket+1, columnRightBracket);
+                String[] columnWords = columnStr.split(",");
+                // 得到插入值
+                String valueStr = insertStmt.substring(valueLeftBracket+1, valueRightBracket);
+                String[] valueWords = valueStr.split(",");
+                // 如果只有一列就不删了
+                if(columnWords.length == 1) continue;
+                // 剩下的都是至少两列插入，随机选择一列删除
+                int idx = Randomly.getNextInt(0,columnWords.length-1);
+                StringBuffer newColumnStr = new StringBuffer();
+                StringBuffer newValueStr  = new StringBuffer();
+                for(int i=0, cntVal=0, cntCol=0, cnt=0; i<columnWords.length; i++){
+                    // 不补null的
+                    if(i==idx && idx ==0) continue;
+                    else if(i!=idx && idx!=0){
+                        if(i==0){
+                            newValueStr.append(valueWords[i]);
+                            newColumnStr.append(columnWords[i]);
+                        }
+                        else{
+                            newValueStr.append(","+valueWords[i]);
+                            newColumnStr.append(","+columnWords[i]);
+                        }
+                    }else if(i!=idx && idx==0){
+                        if(cnt==0){
+                            newValueStr.append(valueWords[i].substring(1));
+                            newColumnStr.append(columnWords[i].substring(1));
+                            cnt++;
+                        }
+                        else{
+                            newValueStr.append(","+valueWords[i]);
+                            newColumnStr.append(","+columnWords[i]);
+                            cnt++;
+                        }
+                    }
+                    /*  补null的
+                    if(i==idx && idx==0){
+                        newValueStr.append("null");
+                        cntVal++;
+                    }
+                    else if(i==idx && idx!=0){
+                        newValueStr.append(", null");
+                        cntVal++;
+                    }
+                    else if(i!=idx && idx !=0){
+                        if(cntCol==0 && cntVal == 0){
+                            newValueStr.append(valueWords[i]);
+                            newColumnStr.append(columnWords[i]);
+                            cntVal++;
+                            cntCol++;
+                        }
+                        else if(cntCol!=0){
+                            newValueStr.append(","+valueWords[i]);
+                            newColumnStr.append(","+columnWords[i]);
+                            cntVal++;
+                            cntCol++;
+                        }
+                    }
+                    else if(i!=idx && idx == 0){
+                        if(cntCol==0){
+                            newValueStr.append(","+valueWords[i]);
+                            newColumnStr.append(columnWords[i].substring(1));
+                            cntVal++;
+                            cntCol++;
+                        }
+                        else if(cntCol!=0){
+                            newValueStr.append(","+valueWords[i]);
+                            newColumnStr.append(","+columnWords[i]);
+                            cntVal++;
+                            cntCol++;
+                        }
+                    }*/
+                }
+                StringBuffer newInsertStmt = new StringBuffer();
+                // 将去掉某一列后的column列和value列与原先句子进行拼接 Pre里INSERT句子最后加个";"，事务里不需要
+                newInsertStmt.append(insertStmt.substring(0, columnLeftBracket+1));
+                newInsertStmt.append(newColumnStr.toString());
+                newInsertStmt.append(insertStmt.substring(columnRightBracket, valueLeftBracket+1));                                          
+                newInsertStmt.append(newValueStr.toString());
+                newInsertStmt.append(insertStmt.substring(valueRightBracket));
+                
+                insertCell.setStmt(newInsertStmt.toString());
+
+                if (oracleChecker.hasBug(clonedTestCase.toString())) {
+                    log.info("insertSQL [{}] simpilify success",insertCell.getStatement().toString());
+                    // 删除后仍能复现bug则更新测试用例
+                    testCase = testCaseClone(clonedTestCase); 
+                } else {
+                    log.info("insertSQL [{}] simpilify failed",insertCell.getStatement().toString());
+                }
+            }
+            
+        }
+        return testCase;
+    }
+    private TestCase delInsertColTx2(TestCase testCase, OracleChecker oracleChecker){
+        TestCase clonedTestCase = testCaseClone(testCase);
+        for (StatementCell insertCell : clonedTestCase.tx2.getStatements()){
+            if (insertCell.getType() == StatementType.INSERT){
+                StatementCell insertCellCopy = insertCell.copy();
+                String insertStmt = insertCellCopy.getStatement();
+                // 取得列名括号对和值括号对的位置
+                int columnLeftBracket = insertStmt.indexOf("(");
+                int columnRightBracket = insertStmt.indexOf(")");
+                int valueLeftBracket = insertStmt.lastIndexOf("(");
+                int valueRightBracket = insertStmt.lastIndexOf(")");
+                // 得到插入列
+                String columnStr = insertStmt.substring(columnLeftBracket+1, columnRightBracket);
+                String[] columnWords = columnStr.split(",");
+                // 得到插入值
+                String valueStr = insertStmt.substring(valueLeftBracket+1, valueRightBracket);
+                String[] valueWords = valueStr.split(",");
+                // 如果只有一列就不删了
+                if(columnWords.length == 1) continue;
+                // 剩下的都是至少两列插入，随机选择一列删除
+                int idx = Randomly.getNextInt(0,columnWords.length-1);
+                StringBuffer newColumnStr = new StringBuffer();
+                StringBuffer newValueStr  = new StringBuffer();
+                for(int i=0, cntVal=0, cntCol=0, cnt=0; i<columnWords.length; i++){
+                    // 不补null的
+                    if(i==idx && idx ==0) continue;
+                    else if(i!=idx && idx!=0){
+                        if(i==0){
+                            newValueStr.append(valueWords[i]);
+                            newColumnStr.append(columnWords[i]);
+                        }
+                        else{
+                            newValueStr.append(","+valueWords[i]);
+                            newColumnStr.append(","+columnWords[i]);
+                        }
+                    }else if(i!=idx && idx==0){
+                        if(cnt==0){
+                            newValueStr.append(valueWords[i].substring(1));
+                            newColumnStr.append(columnWords[i].substring(1));
+                            cnt++;
+                        }
+                        else{
+                            newValueStr.append(","+valueWords[i]);
+                            newColumnStr.append(","+columnWords[i]);
+                            cnt++;
+                        }
+                    }
+                    /*  补null的
+                    if(i==idx && idx==0){
+                        newValueStr.append("null");
+                        cntVal++;
+                    }
+                    else if(i==idx && idx!=0){
+                        newValueStr.append(", null");
+                        cntVal++;
+                    }
+                    else if(i!=idx && idx !=0){
+                        if(cntCol==0 && cntVal == 0){
+                            newValueStr.append(valueWords[i]);
+                            newColumnStr.append(columnWords[i]);
+                            cntVal++;
+                            cntCol++;
+                        }
+                        else if(cntCol!=0){
+                            newValueStr.append(","+valueWords[i]);
+                            newColumnStr.append(","+columnWords[i]);
+                            cntVal++;
+                            cntCol++;
+                        }
+                    }
+                    else if(i!=idx && idx == 0){
+                        if(cntCol==0){
+                            newValueStr.append(","+valueWords[i]);
+                            newColumnStr.append(columnWords[i].substring(1));
+                            cntVal++;
+                            cntCol++;
+                        }
+                        else if(cntCol!=0){
+                            newValueStr.append(","+valueWords[i]);
+                            newColumnStr.append(","+columnWords[i]);
+                            cntVal++;
+                            cntCol++;
+                        }
+                    }*/
+                }
+                // 将去掉某一列后的column列和value列与原先句子进行拼接 Pre里INSERT句子最后加个";"，事务里不需要
+                StringBuffer newInsertStmt = new StringBuffer();
+                newInsertStmt.append(insertStmt.substring(0, columnLeftBracket+1));
+                newInsertStmt.append(newColumnStr.toString());
+                newInsertStmt.append(insertStmt.substring(columnRightBracket, valueLeftBracket+1));                                          
+                newInsertStmt.append(newValueStr.toString());
+                newInsertStmt.append(insertStmt.substring(valueRightBracket));
+                
+                insertCell.setStmt(newInsertStmt.toString());
+
+                if (oracleChecker.hasBug(clonedTestCase.toString())) {
+                    log.info("insertSQL [{}] simpilify success",insertCell.getStatement().toString());
+                    // 删除后仍能复现bug则更新测试用例
+                    testCase = testCaseClone(clonedTestCase); 
+                } else {
+                    log.info("insertSQL [{}] simpilify failed",insertCell.getStatement().toString());
+                }
+            }
+            
+        }
+        return testCase;
+    }
+    private TestCase delUpdateColTx1(TestCase testCase, OracleChecker oracleChecker){
+        TestCase clonedTestCase = testCaseClone(testCase);
+        for (StatementCell upCell : clonedTestCase.tx1.getStatements()) {
+            if (upCell.getType() == StatementType.UPDATE) {
+                StatementCell cloneUpCell = upCell.copy();
+                String upStmt = cloneUpCell.getStatement();
+                // 将SET和WHERE转变成“，”，这样的话以第一个和最后一个“，”就会包含更新列项 将其subString提取出来
+                String replacedUpStmt = upStmt.replace("SET", "WHERE");
+                String finalReplacedUpStmt = replacedUpStmt.replace("WHERE",",");
+               // System.out.println(finalReplacedUpStmt);
+                int firstCommaIdx = finalReplacedUpStmt.indexOf(",");
+                int lastCommaIdx = finalReplacedUpStmt.lastIndexOf(",");
+                String updateStr = finalReplacedUpStmt.substring(firstCommaIdx+1, lastCommaIdx-1);
+                // 获取更新列项
+                String[] updateWords = updateStr.split(",");
+                // 如果只有一个则不进行简化
+                if(updateWords.length==1) continue;
+                int idx = Randomly.getNextInt(0, updateWords.length-1);
+                // 删除并重新拼接
+                StringBuffer updateStmt = new StringBuffer();
+                for(int i=0, cnt=0; i<updateWords.length;i++){
+                    if(i==idx) continue;
+                    else{
+                        if(cnt==0){
+                            updateStmt.append(updateWords[i]);
+                            cnt++;
+                        }else{
+                            updateStmt.append(","+updateWords[i]);
+                        }
+                    }
+                }
+                updateStmt.append(" ");
+                StringBuffer replacedUpdateStr = new StringBuffer();
+                StringBuffer replacedUpdateStrPrefix = new StringBuffer();
+    
+                replacedUpdateStr.append(finalReplacedUpStmt);
+                replacedUpdateStr.replace(firstCommaIdx+1, lastCommaIdx, updateStmt.toString());
+               
+                replacedUpdateStr.insert(replacedUpdateStr.toString().indexOf(",")+1, "SET");
+                replacedUpdateStrPrefix.append(replacedUpdateStr.toString());
+
+                replacedUpdateStr.insert(replacedUpdateStr.toString().lastIndexOf(",")+1,"WHERE");
+                replacedUpdateStr.deleteCharAt(replacedUpdateStr.toString().indexOf(","));
+                replacedUpdateStrPrefix.deleteCharAt(replacedUpdateStrPrefix.toString().indexOf(","));
+                replacedUpdateStr.deleteCharAt(replacedUpdateStr.toString().lastIndexOf(","));
+
+                upCell.setStmt(replacedUpdateStr.toString());
+                upCell.setWherePrefix(replacedUpdateStrPrefix.substring(0, replacedUpdateStrPrefix.toString().lastIndexOf(",")-1));
+                if (oracleChecker.hasBug(clonedTestCase.toString())) {
+                    log.info("updateSQL [{}] simpilify success",upCell.getStatement().toString());
+                    // 删除后仍能复现bug则更新测试用例
+                    testCase = testCaseClone(clonedTestCase); 
+                } else {
+                    log.info("updateSQL [{}] simpilify failed",upCell.getStatement().toString());
+                }
+            }
+        }
+        return testCase;
+    }
+    private TestCase delUpdateColTx2(TestCase testCase, OracleChecker oracleChecker){
+        TestCase clonedTestCase = testCaseClone(testCase);
+        for (StatementCell upCell : clonedTestCase.tx2.getStatements()) {
+            if (upCell.getType() == StatementType.UPDATE) {
+                StatementCell cloneUpCell = upCell.copy();
+                String upStmt = cloneUpCell.getStatement();
+                // 将SET和WHERE转变成“，”，这样的话以第一个和最后一个“，”就会包含更新列项 将其subString提取出来
+                String replacedUpStmt = upStmt.replace("SET", "WHERE");
+                String finalReplacedUpStmt = replacedUpStmt.replace("WHERE",",");
+               // System.out.println(finalReplacedUpStmt);
+                int firstCommaIdx = finalReplacedUpStmt.indexOf(",");
+                int lastCommaIdx = finalReplacedUpStmt.lastIndexOf(",");
+                String updateStr = finalReplacedUpStmt.substring(firstCommaIdx+1, lastCommaIdx-1);
+                // 获取更新列项
+                String[] updateWords = updateStr.split(",");
+                // 如果只有一个则不进行简化
+                if(updateWords.length==1) continue;
+                int idx = Randomly.getNextInt(0, updateWords.length-1);
+                // 删除并重新拼接
+                StringBuffer updateStmt = new StringBuffer();
+                for(int i=0, cnt=0; i<updateWords.length;i++){
+                    if(i==idx) continue;
+                    else{
+                        if(cnt==0){
+                            updateStmt.append(updateWords[i]);
+                            cnt++;
+                        }else{
+                            updateStmt.append(","+updateWords[i]);
+                        }
+                    }
+                }
+                updateStmt.append(" ");
+                StringBuffer replacedUpdateStr = new StringBuffer();
+                StringBuffer replacedUpdateStrPrefix = new StringBuffer();
+                replacedUpdateStr.append(finalReplacedUpStmt);
+                replacedUpdateStr.replace(firstCommaIdx+1, lastCommaIdx, updateStmt.toString());
+               
+                replacedUpdateStr.insert(replacedUpdateStr.toString().indexOf(",")+1, "SET");
+                replacedUpdateStrPrefix.append(replacedUpdateStr.toString());
+
+                replacedUpdateStr.insert(replacedUpdateStr.toString().lastIndexOf(",")+1,"WHERE");
+                replacedUpdateStr.deleteCharAt(replacedUpdateStr.toString().indexOf(","));
+                replacedUpdateStrPrefix.deleteCharAt(replacedUpdateStrPrefix.toString().indexOf(","));
+                replacedUpdateStr.deleteCharAt(replacedUpdateStr.toString().lastIndexOf(","));
+
+                upCell.setStmt(replacedUpdateStr.toString());
+                upCell.setWherePrefix(replacedUpdateStrPrefix.substring(0, replacedUpdateStrPrefix.toString().lastIndexOf(",")-1));
+                if (oracleChecker.hasBug(clonedTestCase.toString())) {
+                    log.info("updateSQL [{}] simpilify success",upCell.getStatement().toString());
+                    // 删除后仍能复现bug则更新测试用例
+                    testCase = clonedTestCase; 
+                } else {
+                    log.info("updateSQL [{}] simpilify failed",upCell.getStatement().toString());
+                }
+            }
+        }
+        return testCase;
+    }
     private StatementCell deleteStatement(TestCase testCase) {
         List<StatementType> excludedTypes = new ArrayList<>();
         // 遍历stmtTypeMap，将列表为空的类型加入excludedTypes
