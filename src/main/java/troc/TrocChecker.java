@@ -475,6 +475,7 @@ public class TrocChecker {
         // } else {
         // stmt.view = newestView();
         // }
+        // log.info("vData: {}", vData.toString());
         stmt.view = newestView();
         // log.info("stmt {}, view: {}", stmt, stmt.view);
         // 锁分析
@@ -749,9 +750,9 @@ public class TrocChecker {
                     constant = new MySQLNullConstant();
                 } else {
                     constant = stmt.predicate.getExpectedValue(tupleMap);
-                    log.info("expression: {}", stmt.whereClause);
-                    log.info("tuple: {}", tupleMap);
-                    log.info("constant: {}", constant);
+                    // log.info("expression: {}", stmt.whereClause);
+                    // log.info("tuple: {}", tupleMap);
+                    // log.info("constant: {}", constant);
                 }
                 if (!constant.isNull() && constant.asBooleanNotNull()) {
                     // 加入结果集
@@ -759,14 +760,13 @@ public class TrocChecker {
                 }
             }
             for (int rowId : rowIds) {
-                boolean deleted = stmt.type == StatementType.DELETE;
-                // 当前行最新数据
-                Object[] data = allView.data.get(rowId);
+                boolean deleted = allView.deleted != null && allView.deleted.containsKey(rowId)
+                        && allView.deleted.get(rowId) || stmt.type == StatementType.DELETE;
+                Object[] newData = null;
                 if (deleted) {
-                    vData.get(rowId).add(new Version(data.clone(), curTx, true));
+                    newData = allView.data.get(rowId);
                 } else {
-                    // 对data进行复制,修改
-                    Object[] newData = data.clone();
+                    newData = allView.data.get(rowId).clone();
                     for (int i = 0; i < TableTool.colNames.size(); i++) {
                         String colName = TableTool.colNames.get(i);
                         if (stmt.values.containsKey(colName)) {
@@ -774,8 +774,14 @@ public class TrocChecker {
                             newData[i] = TableTool.convertStringToType(value, TableTool.colTypeNames.get(i));
                         }
                     }
-                    vData.get(rowId).add(new Version(newData, curTx, false));
                 }
+                if (newData == null) {
+                    continue;
+                }
+                if (!vData.containsKey(rowId)) {
+                    vData.put(rowId, new ArrayList<>());
+                }
+                vData.get(rowId).add(new Version(newData.clone(), curTx, deleted));
             }
         }
     }
@@ -855,9 +861,9 @@ public class TrocChecker {
                 constant = new MySQLNullConstant();
             } else {
                 constant = stmt.predicate.getExpectedValue(tupleMap);
-                log.info("expression: {}", stmt.whereClause);
-                log.info("tuple: {}", tupleMap);
-                log.info("constant: {}", constant);
+                // log.info("expression: {}", stmt.whereClause);
+                // log.info("tuple: {}", tupleMap);
+                // log.info("constant: {}", constant);
             }
             if (!constant.isNull() && constant.asBooleanNotNull()) {
                 // 加入结果集
@@ -924,7 +930,9 @@ public class TrocChecker {
                 }
             }
             if (!oStmt.blocked && !eStmt.blocked) {
-                if (oStmt.type == StatementType.SELECT && oStmt.equals(eStmt)) {
+                if ((oStmt.type == StatementType.SELECT || oStmt.type == StatementType.SELECT_SHARE
+                        || oStmt.type == StatementType.SELECT_UPDATE)
+                        && oStmt.equals(eStmt)) {
                     if (!compareResultSets(oStmt.result, eStmt.result)) {
                         log.info("Error: Inconsistent query result");
                         log.info("query: " + oStmt.statement);

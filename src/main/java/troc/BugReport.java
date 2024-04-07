@@ -21,18 +21,29 @@ public class BugReport {
         StringBuilder sb = new StringBuilder("=============================");
         sb.append("BUG REPORT\n")
                 .append(" -- Oracle: ").append(TableTool.oracle).append("\n")
-                .append(" -- Create Table SQL: ").append(createTableSQL).append("\n")
-                .append(" -- InitializeStatements:").append("\n");
+                .append(createTableSQL).append("\n");
         for (String stmt : initializeStatements) {
-            sb.append("\t").append(stmt).append(";\n");
+            sb.append(stmt).append(";\n");
         }
-        sb.append(" -- Initial Table: \n").append(initialTable).append("\n");
-        sb.append(" -- Tx1: ").append(tx1).append("\n");
-        sb.append(" -- Tx2: ").append(tx2).append("\n");
-        sb.append(" -- Input Schedule: ").append(inputSchedule).append("\n");
-        sb.append(" -- Submitted Order: ").append(submittedOrder).append("\n");
-        sb.append(" -- Execution Result: ").append(execRes).append("\n");
-        sb.append(" -- Inferred Result: ").append(inferredRes).append("\n");
+        sb.append("\n");
+        sb.append(tx1.getIsolationlevel().getAlias()).append("\n");
+        if (tx1.statements != null) {
+            for (StatementCell stmt : tx1.statements) {
+                sb.append(stmt.statement).append(";\n");
+            }
+        }
+        sb.append("\n");
+        sb.append(tx2.getIsolationlevel().getAlias()).append("\n");
+        if (tx2.statements != null) {
+            for (StatementCell stmt : tx2.statements) {
+                sb.append(stmt.statement).append(";\n");
+            }
+        }
+        sb.append("\n");
+        sb.append(inputSchedule).append("\n").append("END\n");
+        // sb.append(" -- Submitted Order: ").append(submittedOrder).append("\n");
+        // sb.append(" -- Execution Result: ").append(execRes).append("\n");
+        // sb.append(" -- Inferred Result: ").append(inferredRes).append("\n");
         return sb.toString();
     }
 }

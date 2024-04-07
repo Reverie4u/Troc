@@ -68,7 +68,8 @@ public class StatementCell {
         }
         this.parseStatement();
         // 还需要解析select columns
-        if (this.type == StatementType.SELECT) {
+        if (this.type == StatementType.SELECT || this.type == StatementType.SELECT_SHARE
+                || this.type == StatementType.SELECT_UPDATE) {
             this.selectedColumns = new ArrayList<>();
             // 截取SELECT到FROM之间的子串
             Pattern pattern1 = Pattern.compile("SELECT\\s+(.*?)\\s+FROM", Pattern.CASE_INSENSITIVE);

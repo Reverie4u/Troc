@@ -44,6 +44,7 @@ public class Lock {
     }
 
     private boolean useRangeLock(StatementCell stmt) {
+        // CS情况是没有间隙锁的
         if (TableTool.dbms == DBMS.MYSQL || TableTool.dbms == DBMS.MARIADB)
             return (stmt.tx.isolationlevel == IsolationLevel.REPEATABLE_READ
                     || stmt.tx.isolationlevel == IsolationLevel.SERIALIZABLE)

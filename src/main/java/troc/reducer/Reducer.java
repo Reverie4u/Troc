@@ -109,7 +109,7 @@ public class Reducer {
             }
         }
         OracleChecker oracleChecker;
-        if (TableTool.oracle.equals("MT")) {
+        if (TableTool.oracle.equals("MT") || TableTool.oracle.equals("CS")) {
             oracleChecker = new MTOracleChecker();
         } else {
             oracleChecker = new DTOracleChecker();

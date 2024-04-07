@@ -92,6 +92,10 @@ public class TableTool {
         return colNames;
     }
 
+    public static DBMS getDbms() {
+        return dbms;
+    }
+
     static void initialize(Options options) {
         refMap = new HashMap<>();
         refMap.put("MYSQL", "MARIADB");

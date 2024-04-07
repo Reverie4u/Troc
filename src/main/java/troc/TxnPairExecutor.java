@@ -48,6 +48,18 @@ public class TxnPairExecutor {
     private void execute() {
         TableTool.setIsolationLevel(tx1);
         TableTool.setIsolationLevel(tx2);
+        if (ref) {
+            // 如果参照数据库是TiDB，也需要设置对应隔离级别
+            String anotherDBMS = TableTool.refMap.get(TableTool.getDbms().name());
+            if ("TIDB".equals(anotherDBMS)) {
+                TableTool.executeWithConn(tx1.refConn, "SET SESSION tidb_txn_mode = 'pessimistic'");
+                TableTool.executeWithConn(tx2.refConn, "SET SESSION tidb_txn_mode = 'pessimistic'");
+                String sql1 = "SET SESSION TRANSACTION ISOLATION LEVEL " + tx1.isolationlevel.getName();
+                TableTool.executeWithConn(tx1.refConn, sql1);
+                String sql2 = "SET SESSION TRANSACTION ISOLATION LEVEL " + tx2.isolationlevel.getName();
+                TableTool.executeWithConn(tx2.refConn, sql2);
+            }
+        }
         actualSchedule = new ArrayList<>();
         txnAbort.put(1, false);
         txnAbort.put(2, false);
