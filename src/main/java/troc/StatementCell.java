@@ -49,7 +49,33 @@ public class StatementCell {
     public Transaction getTx() {
         return tx;
     }
-
+    public String getStmt(){
+        return statement;
+    }
+    public String getWhereClause(){
+        return whereClause;
+    }
+    public String getWherePrefix(){
+        return wherePrefix;
+    }
+    public String getForPostFix(){
+        return forPostfix;
+    }
+    public MySQLExpression getPredicate(){
+        return predicate;
+    }
+    public void setWhereClause(String newWhereClause){
+        this.whereClause = newWhereClause;
+    }
+    public void setPredicate(MySQLExpression newPredicate){
+        this.predicate = newPredicate;
+    }
+    public void setStmt(String newStmt){
+        this.statement = newStmt;
+    }
+    public void setWherePrefix(String newPrefix){
+        this.wherePrefix = newPrefix;
+    }
     public StatementCell(Transaction tx, int statementId) {
         this.tx = tx;
         this.statementId = statementId;
@@ -344,7 +370,14 @@ public class StatementCell {
         copy.values = values;
         copy.blocked = false;
         copy.result = null;
-        // 共享引用，因为predicate不会再修改了
+        // 重新遍历一遍whereClause赋给copy.predicate
+        // MySQLExpressionLexer lexer = new MySQLExpressionLexer(CharStreams.fromString(this.whereClause));
+        // // create a buffer of tokens pulled from the lexer
+        // CommonTokenStream tokens = new CommonTokenStream(lexer);
+        // // create a parser that feeds off the tokens buffer
+        // MySQLExpressionParser parser = new MySQLExpressionParser(tokens);
+        // ParseTree tree = parser.expression(); // begin parsing at expression rule
+        // copy.predicate = visitor.visit(tree);
         copy.predicate = predicate;
         copy.selectedColumns = selectedColumns;
         return copy;

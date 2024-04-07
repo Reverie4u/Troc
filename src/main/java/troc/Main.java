@@ -36,29 +36,28 @@ public class Main {
         // MySQLExpression expression = new MySQLBinaryOperation(constant1, constant2,
         // MySQLBinaryOperator.XOR);
         // create a CharStream that reads from standard input
-
-        // String input = "((- (c1))) NOT IN (CAST(((353686180) NOT IN (c0, 1266854665,
-        // 603312483)) XOR ((c2) IS NOT UNKNOWN) AS SIGNED), (((+ (c1))) IS NULL) IS NOT
-        // FALSE, (((c0) IS NOT FALSE) IN ((-1032203753) IN (-2049464461), c2)) XOR
-        // (((1552624276) BETWEEN (c2) AND (c2)) IS NOT UNKNOWN))";
-        // // create a lexer that feeds off of input CharStream
-        // MySQLExpressionLexer lexer = new
-        // MySQLExpressionLexer(CharStreams.fromString(input));
-        // // create a buffer of tokens pulled from the lexer
-        // CommonTokenStream tokens = new CommonTokenStream(lexer);
-        // // create a parser that feeds off the tokens buffer
-        // MySQLExpressionParser parser = new MySQLExpressionParser(tokens);
-        // // 这里得到的ParseTree是通用AST
-        // ParseTree tree = parser.expression(); // begin parsing at expression rule
-        // MySQLExpressionVisitorImpl visitor = new MySQLExpressionVisitorImpl();
-
-        // // 通过调用visit函数将通用AST转换成自定义AST，自定义AST中的节点类型都是预定义好的
-        // // 这个地方可以调试看MySQLExpression的结构
-        // MySQLExpression expression = visitor.visit(tree);
-        // System.out.println(MySQLVisitor.asString(expression));
-        // 求解expression
-        // MySQLExpression result = expression.getExpectedValue(null);
-
+        /*
+         * String input =
+         * "(((c2) AND ((- (-1962991450)))) NOT IN ((+ ((+ (770305223)))))) ^ ((((1095947040) NOT IN (-1427686796)) BETWEEN (408773806) AND ((NULL) | (NULL))) IS NULL)"
+         * ;
+         * // create a lexer that feeds off of input CharStream
+         * MySQLExpressionLexer lexer = new
+         * MySQLExpressionLexer(CharStreams.fromString(input));
+         * // create a buffer of tokens pulled from the lexer
+         * CommonTokenStream tokens = new CommonTokenStream(lexer);
+         * // create a parser that feeds off the tokens buffer
+         * MySQLExpressionParser parser = new MySQLExpressionParser(tokens);
+         * // 这里得到的ParseTree是通用AST
+         * ParseTree tree = parser.expression(); // begin parsing at expression rule
+         * MySQLExpressionVisitorImpl visitor = new MySQLExpressionVisitorImpl();
+         * 
+         * // // 通过调用visit函数将通用AST转换成自定义AST，自定义AST中的节点类型都是预定义好的
+         * // // 这个地方可以调试看MySQLExpression的结构
+         * // MySQLExpression expression = visitor.visit(tree);
+         * // System.out.println(MySQLVisitor.asString(expression));
+         * // 求解expression
+         * // MySQLExpression result = expression.getExpectedValue(null);
+         */
         Options options = new Options();
         JCommander jCmd = new JCommander();
         jCmd.addObject(options);
