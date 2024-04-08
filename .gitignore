@@ -7,3 +7,4 @@ troc.iml
 .project
 .vscode/
 *.out
+.VSCodeCounter
