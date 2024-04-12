@@ -61,6 +61,9 @@ public class StatementCell {
     public String getForPostFix(){
         return forPostfix;
     }
+    public int getStmtId(){
+        return statementId;
+    }
     public MySQLExpression getPredicate(){
         return predicate;
     }
@@ -370,15 +373,19 @@ public class StatementCell {
         copy.values = values;
         copy.blocked = false;
         copy.result = null;
-        // 重新遍历一遍whereClause赋给copy.predicate
-        // MySQLExpressionLexer lexer = new MySQLExpressionLexer(CharStreams.fromString(this.whereClause));
-        // // create a buffer of tokens pulled from the lexer
-        // CommonTokenStream tokens = new CommonTokenStream(lexer);
-        // // create a parser that feeds off the tokens buffer
-        // MySQLExpressionParser parser = new MySQLExpressionParser(tokens);
-        // ParseTree tree = parser.expression(); // begin parsing at expression rule
-        // copy.predicate = visitor.visit(tree);
-        copy.predicate = predicate;
+        if(!copy.whereClause.equals("")){
+            MySQLExpressionLexer lexer = new MySQLExpressionLexer(CharStreams.fromString(copy.whereClause));
+            // create a buffer of tokens pulled from the lexer
+            CommonTokenStream tokens = new CommonTokenStream(lexer);
+            // create a parser that feeds off the tokens buffer
+            MySQLExpressionParser parser = new MySQLExpressionParser(tokens);
+            ParseTree tree = parser.expression(); // begin parsing at expression rule
+            copy.predicate = visitor.visit(tree);
+        }
+        // 共享引用
+        else{
+            copy.predicate = predicate;
+        }    
         copy.selectedColumns = selectedColumns;
         return copy;
     }

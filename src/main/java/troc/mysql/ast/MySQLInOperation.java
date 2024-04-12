@@ -14,9 +14,9 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class MySQLInOperation implements MySQLExpression {
 
-    private final MySQLExpression expr;
-    private final List<MySQLExpression> listElements;
-    private final boolean isTrue;
+    private MySQLExpression expr;
+    private List<MySQLExpression> listElements;
+    private boolean isTrue;
 
     public MySQLInOperation(MySQLExpression expr, List<MySQLExpression> listElements, boolean isTrue) {
         this.expr = expr;
@@ -32,6 +32,16 @@ public class MySQLInOperation implements MySQLExpression {
         return listElements;
     }
 
+    public void setExpr(MySQLExpression newExpr){
+        this.expr = newExpr;
+    }
+
+    public void setListElements(List<MySQLExpression> newListElements){
+        this.listElements = listElements;
+    }
+    public void setIsTrue(boolean newIsTrue){
+        this.isTrue = newIsTrue;
+    }
     @Override
     public MySQLConstant getExpectedValue(Map<String, Object> row) {
         MySQLConstant leftVal = expr.getExpectedValue(row);

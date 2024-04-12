@@ -6,10 +6,10 @@ import troc.Randomly;
 
 public class MySQLBinaryLogicalOperation implements MySQLExpression {
 
-    private final MySQLExpression left;
-    private final MySQLExpression right;
-    private final MySQLBinaryLogicalOperator op;
-    private final String textRepresentation;
+    private MySQLExpression left;
+    private MySQLExpression right;
+    private MySQLBinaryLogicalOperator op;
+    private String textRepresentation;
 
     public enum MySQLBinaryLogicalOperator {
         AND("AND", "&&") {
@@ -100,6 +100,21 @@ public class MySQLBinaryLogicalOperation implements MySQLExpression {
         return textRepresentation;
     }
 
+    public void setLeft(MySQLExpression newLeft){
+        this.left = newLeft;
+    }
+
+    public void setOp(MySQLBinaryLogicalOperator newOp){
+        this.op = newOp;
+    }
+
+    public void setRight(MySQLExpression newRight){
+        this.right = newRight;
+    }
+
+    public void setTextRepresentation(String newTextRepresentation){
+        this.textRepresentation = newTextRepresentation;
+    }
     @Override
     public MySQLConstant getExpectedValue(Map<String, Object> row) {
         MySQLConstant leftExpected = left.getExpectedValue(row);

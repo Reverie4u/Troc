@@ -35,7 +35,24 @@ public class ProbabilityTableBasedOrderSelector<T> implements OrderSelector<T> {
         }
         return null;
     }
-
+    @Override
+    public T selectNext() {
+        // 使用轮盘赌方法选择下一个类型
+        int sum = 0;
+        // 遍历candidatesMapCopy，计算权重总和
+        for (Map.Entry<T, Integer> entry : candidatesMap.entrySet()) {
+            sum += entry.getValue();
+        }
+        int rand = (int) (Math.random() * sum);
+        for (Map.Entry<T, Integer> entry : candidatesMap.entrySet()) {
+            rand -= entry.getValue();
+            if (rand <= 0) {
+                return entry.getKey();
+            }
+        }
+        return null;
+    }
+    
     public ProbabilityTableBasedOrderSelector(List<T> candidates) {
         candidatesMap = new HashMap<>();
         for (T candidate : candidates) {

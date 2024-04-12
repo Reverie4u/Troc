@@ -3,8 +3,8 @@ package troc.mysql.ast;
 import java.util.Map;
 
 public class MySQLCastOperation implements MySQLExpression {
-    private final MySQLExpression expr;
-    private final CastType type;
+    private MySQLExpression expr;
+    private CastType type;
 
     public enum CastType {
         UNSIGNED, SIGNED;
@@ -32,6 +32,13 @@ public class MySQLCastOperation implements MySQLExpression {
         return type;
     }
 
+    public void setExpr(MySQLExpression newExpr) {
+        this.expr = newExpr;
+    }
+
+    public void setType(CastType newType) {
+        this.type = newType;
+    }
     @Override
     public MySQLConstant getExpectedValue(Map<String, Object> row) {
         return expr.getExpectedValue(row).castAs(type);

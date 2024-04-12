@@ -112,9 +112,9 @@ public class MySQLBinaryComparisonOperation implements MySQLExpression {
         }
     }
 
-    private final MySQLExpression left;
-    private final MySQLExpression right;
-    private final BinaryComparisonOperator op;
+    private MySQLExpression left;
+    private MySQLExpression right;
+    private BinaryComparisonOperator op;
 
     public MySQLBinaryComparisonOperation(MySQLExpression left, MySQLExpression right, BinaryComparisonOperator op) {
         this.left = left;
@@ -133,7 +133,18 @@ public class MySQLBinaryComparisonOperation implements MySQLExpression {
     public MySQLExpression getRight() {
         return right;
     }
+    
+    public void setLeft(MySQLExpression newLeft){
+        this.left = newLeft;
+    }
 
+    public void setOp(BinaryComparisonOperator newOp){
+        this.op = newOp;
+    }
+
+    public void setRight(MySQLExpression newRight){
+        this.right = newRight;
+    }
     @Override
     public MySQLConstant getExpectedValue(Map<String, Object> row) {
         return op.getExpectedValue(left.getExpectedValue(row), right.getExpectedValue(row));
