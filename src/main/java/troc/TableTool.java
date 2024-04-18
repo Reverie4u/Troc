@@ -465,7 +465,7 @@ public class TableTool {
             rs.close();
         } catch (SQLException e) {
             log.info("Execute query failed: {}", query);
-            throw new RuntimeException("Execution failed: ", e);
+            e.printStackTrace();
         }
     }
 
