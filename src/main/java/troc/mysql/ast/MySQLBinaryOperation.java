@@ -11,9 +11,9 @@ import troc.mysql.ast.MySQLCastOperation.CastType;
 @Slf4j
 public class MySQLBinaryOperation implements MySQLExpression {
 
-    private final MySQLExpression left;
-    private final MySQLExpression right;
-    private final MySQLBinaryOperator op;
+    private MySQLExpression left;
+    private MySQLExpression right;
+    private MySQLBinaryOperator op;
 
     public enum MySQLBinaryOperator {
 
@@ -116,4 +116,15 @@ public class MySQLBinaryOperation implements MySQLExpression {
         return right;
     }
 
+    public void setLeft(MySQLExpression newLeft) {
+        this.left = newLeft;
+    }
+
+    public void setOp(MySQLBinaryOperator newOp) {
+        this.op = newOp;
+    }
+
+    public void setRight(MySQLExpression newRight) {
+        this.right = newRight;
+    }
 }

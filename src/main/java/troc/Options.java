@@ -53,17 +53,17 @@ public class Options {
 
     // could be DT, MT, CS
     @Parameter(names = "--oracle", description = "Specifies the oracle type")
-    private String oracle = "MT";
+    private String oracle = "CS";
 
     @Parameter(names = "--filter-duplicate-bug", description = "Whether to enable duplicate bug filtering")
     private boolean filterDuplicateBug = false;
 
     @Parameter(names = "--reducer", description = "Whether to enable reducer")
-    private boolean reducerSwitchOn = false;
+    private boolean reducerSwitchOn = true;
 
     @Parameter(names = "--reducer-type", description = "Reducer type, can be random, epsilon-greedy, probability-table, all")
     private String reducerType = "random";
 
     @Parameter(names = "--max-reduce-count", description = "The maximum number of reduction")
-    private int maxReduceCount = 15;
+    private int maxReduceCount = 25;
 }

@@ -226,8 +226,8 @@ public abstract class Table {
         StatementCell cell = new StatementCell(tx, 0, "BEGIN");
         statementList.add(cell);
         for (int i = 1; i <= n; i++) {
-            cell = genStatement(tx, i);
             statementList.add(cell);
+            cell = genStatement(tx, i);
         }
         String lastStmt = "COMMIT";
         if (Randomly.getBoolean()) {

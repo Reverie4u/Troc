@@ -42,6 +42,26 @@ public class EpsilonGreedyOrderSelector<T> implements OrderSelector<T> {
         }
     }
 
+    @Override
+    public T selectNext() {
+        // 获取candidatesGainMap中value最大的entry
+        Map.Entry<T, Double> maxEntry = null;
+        for (Map.Entry<T, Double> entry : candidatesGainMap.entrySet()) {
+            if (maxEntry == null || entry.getValue().compareTo(maxEntry.getValue()) > 0) {
+                maxEntry = entry;
+            }
+        }
+        // 如果maxEntry为null，返回null
+        if (maxEntry == null) {
+            return null;
+        }
+        // 以epsilon的概率随机选择一个元素,以1-epsilon的概率选择value最大的元素
+        if (Math.random() < epsilon) {
+            return Randomly.fromList(new ArrayList<>(candidatesGainMap.keySet()));
+        } else {
+            return maxEntry.getKey();
+        }
+    }
     public EpsilonGreedyOrderSelector(List<T> candidates) {
         candidatesGainMap = new HashMap<>();
         for (T candidate : candidates) {

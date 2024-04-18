@@ -4,8 +4,8 @@ import java.util.Map;
 
 public class MySQLUnaryPostfixOperation implements MySQLExpression {
 
-    private final MySQLExpression expression;
-    private final UnaryPostfixOperator operator;
+    private MySQLExpression expression;
+    private UnaryPostfixOperator operator;
     private boolean negate;
 
     public enum UnaryPostfixOperator {
@@ -28,6 +28,14 @@ public class MySQLUnaryPostfixOperation implements MySQLExpression {
 
     public boolean isNegated() {
         return negate;
+    }
+
+    public void setExpression(MySQLExpression newEXpression){
+        this.expression = newEXpression;
+    }
+
+    public void setOperator(UnaryPostfixOperator newOperator){
+        this.operator = newOperator;
     }
 
     public void setNegate(boolean negate) {

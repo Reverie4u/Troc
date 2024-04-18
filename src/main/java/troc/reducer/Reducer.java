@@ -2,23 +2,49 @@ package troc.reducer;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
+import java.util.Random;
 import java.util.Scanner;
+
+import com.mysql.cj.conf.ConnectionUrlParser.Pair;
 
 import lombok.val;
 import lombok.extern.slf4j.Slf4j;
 import troc.IsolationLevel;
 import troc.Randomly;
+import troc.SimplifyType;
 import troc.StatementCell;
 import troc.StatementType;
 import troc.TableTool;
 import troc.Transaction;
+import troc.WhereExprType;
+import troc.mysql.ast.MySQLConstant.MySQLIntConstant;
+import troc.mysql.visitor.MySQLVisitor;
+import troc.mysql.ast.MySQLBetweenOperation;
+import troc.mysql.ast.MySQLBinaryComparisonOperation;
+import troc.mysql.ast.MySQLBinaryLogicalOperation;
+import troc.mysql.ast.MySQLBinaryOperation;
+import troc.mysql.ast.MySQLCastOperation;
+import troc.mysql.ast.MySQLDummyExpression;
+import troc.mysql.ast.MySQLExpression;
+import troc.mysql.ast.MySQLInOperation;
+import troc.mysql.ast.MySQLUnaryPostfixOperation;
+import troc.mysql.ast.MySQLUnaryPrefixOperation;
 
 @Slf4j
 public class Reducer {
     // 全局只有一个Reducer
+    // 第一层：语句删除层选择器
     OrderSelector<StatementType> stmtDelOrderSelector;
+    // 第二层：语句简化层选择器
+    OrderSelector<SimplifyType> stmtSimplifySelector;
+    // 第三层：表达式简化层选择器
+    OrderSelector<WhereExprType> exprSimplifySelector;
+    // 第四层：常量简化层选择器
+    OrderSelector<StatementType> constantSimplifySelector;
     // 第一层简化的map
     Map<StatementType, ArrayList<StatementCell>> stmtTypeMap;
     // 第一层简化失败的语句map
@@ -40,25 +66,68 @@ public class Reducer {
         maxReduceCount = TableTool.maxReduceCount;
         stmtTypeMap = new HashMap<>();
         stmtTypeFailMap = new HashMap<>();
-        List<StatementType> candidates = new ArrayList<>();
-        StatementType[] types = new StatementType[] {
-                StatementType.SELECT, StatementType.UPDATE, StatementType.INSERT, StatementType.DELETE,
+        List<StatementType> candidatesForDelStmt = new ArrayList<>();
+        List<SimplifyType> candidatesForSimplifyStmt = new ArrayList<>();
+        List<WhereExprType> candidatesForSimplifyExpr = new ArrayList<>();
+        List<StatementType> candidatesForSimplifyCons = new ArrayList<>();
+        StatementType[] typesForDelStmt = new StatementType[] {
+                StatementType.SELECT, StatementType.UPDATE, 
+                StatementType.INSERT, StatementType.DELETE,
                 StatementType.CREATE_INDEX, StatementType.SELECT_SHARE,
                 StatementType.SELECT_UPDATE };
-        for (StatementType type : types) {
+
+        SimplifyType[] typesForSimplifyStmt = new SimplifyType[] {
+                SimplifyType.DEL_EXPRE, SimplifyType.DEK_INSERT_COL,
+                SimplifyType.DEL_UPDATE_COL,SimplifyType.SIMPLIFY_TABLE };
+
+        WhereExprType[] typesForSimplifyExpr = new WhereExprType[]{
+                WhereExprType.MySQLBetweenOperation, 
+                WhereExprType.MySQLBinaryComparisonOperation, 
+                WhereExprType.MySQLBinaryLogicalOperation,
+                WhereExprType.MySQLBinaryOperation,
+                WhereExprType.MySQLCastOperation,
+                WhereExprType.MySQLInOperation,
+                WhereExprType.MySQLUnaryPostfixOperation,
+                WhereExprType.MySQLUnaryPrefixOperation
+            };
+        StatementType[] typesForSimplifyCons = new StatementType[]{
+                StatementType.SELECT, StatementType.UPDATE,
+                StatementType.INSERT, StatementType.DELETE,
+                StatementType.SELECT_SHARE, StatementType.SELECT_UPDATE
+        };
+        for (StatementType type : typesForDelStmt) {
             stmtTypeMap.put(type, new ArrayList<>());
             stmtTypeFailMap.put(type, new ArrayList<>());
-            candidates.add(type);
+            candidatesForDelStmt.add(type);
         }
+        for (SimplifyType type : typesForSimplifyStmt){
+            candidatesForSimplifyStmt.add(type);
+        }
+        for (WhereExprType type : typesForSimplifyExpr){
+            candidatesForSimplifyExpr.add(type);
+        }
+        for(StatementType type : typesForSimplifyCons){
+            candidatesForSimplifyCons.add(type);
+        }
+
         switch (selectorType) {
             case 0:
-                stmtDelOrderSelector = new RandomOrderSelector<>(candidates);
+                stmtDelOrderSelector = new RandomOrderSelector<>(candidatesForDelStmt);
+                stmtSimplifySelector = new RandomOrderSelector<>(candidatesForSimplifyStmt);
+                exprSimplifySelector = new RandomOrderSelector<>(candidatesForSimplifyExpr);
+                constantSimplifySelector = new RandomOrderSelector<>(candidatesForSimplifyCons);
                 break;
             case 1:
-                stmtDelOrderSelector = new ProbabilityTableBasedOrderSelector<>(candidates);
+                stmtDelOrderSelector = new ProbabilityTableBasedOrderSelector<>(candidatesForDelStmt);
+                stmtSimplifySelector = new ProbabilityTableBasedOrderSelector<>(candidatesForSimplifyStmt);
+                exprSimplifySelector = new ProbabilityTableBasedOrderSelector<>(candidatesForSimplifyExpr);
+                constantSimplifySelector = new ProbabilityTableBasedOrderSelector<>(candidatesForSimplifyCons);
                 break;
             case 2:
-                stmtDelOrderSelector = new EpsilonGreedyOrderSelector<>(candidates);
+                stmtDelOrderSelector = new EpsilonGreedyOrderSelector<>(candidatesForDelStmt);
+                stmtSimplifySelector = new EpsilonGreedyOrderSelector<>(candidatesForSimplifyStmt);
+                exprSimplifySelector = new EpsilonGreedyOrderSelector<>(candidatesForSimplifyExpr);
+                constantSimplifySelector = new EpsilonGreedyOrderSelector<>(candidatesForSimplifyCons);
                 break;
             default:
                 break;
@@ -118,7 +187,8 @@ public class Reducer {
             oracleChecker = new DTOracleChecker();
         }
           
-        // 选择一个语句类型
+        //选择一个语句类型
+         
         for (int i = 0; i < maxReduceCount; i++) {
             // 首先克隆一份testcase
             TestCase clonedTestCase = testCaseClone(testCase);
@@ -139,38 +209,27 @@ public class Reducer {
                 stmtDelOrderSelector.updateWeight(delStmt.getType(), false);
             }
         }
-        // *语句简化层*
+       // *语句简化层*
+      
         // 简化表定义     
-        testCase = simplifyTable(testCase, oracleChecker);
-        // 删除插入列 
-        testCase = delInsertCol(testCase, oracleChecker);
+       testCase = simplifyTable(testCase, oracleChecker);
+       for(int i=1;i<=10;i++){
+        //删除插入列 
+       testCase = delInsertCol(testCase, oracleChecker);
         // 删除更新列
         testCase = delUpdateCol(testCase, oracleChecker);
-        // 删除表达式
-        testCase = delWhereClause(testCase,oracleChecker);
+    //    // 删除表达式
+         testCase = delWhereClause(testCase,oracleChecker);
+         
+      }
+       for(int i=1;i<=50;i++)
+           testCase = simplifyWhereExpr(testCase,oracleChecker);
         // 将测试用例转换为字符串输出
+        for(int i=1;i<=50;i++)
+         testCase = simplifyConstant(testCase,oracleChecker);
         String res = testCase.toString();
         System.out.println(res);
         return res;
-    }
-    private TestCase delWhereClause(TestCase testCase, OracleChecker oracleChecker){
-        // 函数只有for()里的集合不一样
-        testCase = delWhereClauseTx1(testCase, oracleChecker);
-        testCase = delWhereClauseTx2(testCase, oracleChecker);
-        return testCase;
-    }
-    private TestCase delInsertCol(TestCase testCase, OracleChecker oracleChecker){
-        // 函数只有for()里的集合不一样
-        testCase = delInsertColPre(testCase, oracleChecker);
-        testCase = delInsertColTx1(testCase, oracleChecker);
-        testCase = delInsertColTx2(testCase, oracleChecker);
-        return testCase;
-    }
-    private TestCase delUpdateCol(TestCase testCase, OracleChecker oracleChecker){
-        // 两个函数只有for()里的集合不一样
-        testCase = delUpdateColTx1(testCase, oracleChecker);
-        testCase = delUpdateColTx2(testCase, oracleChecker);
-        return testCase;
     }
     private TestCase simplifyTable(TestCase testCase, OracleChecker oracleChecker){
         TestCase clonedTestCase = testCaseClone(testCase);
@@ -189,490 +248,824 @@ public class Reducer {
         }
         return testCase;
     }
-    private TestCase delWhereClauseTx1(TestCase testCase, OracleChecker oracleChecker){
+    private TestCase simplifyConstant(TestCase testCase, OracleChecker oracleChecker){
         TestCase clonedTestCase = testCaseClone(testCase);
-        for(StatementCell whereCell : clonedTestCase.tx1.getStatements()){
-            if(whereCell.getWhereClause() != ""){
-              //  StatementCell whereCellCopy = whereCell.copy();
-                StringBuffer delWhereClause = new StringBuffer();
-                delWhereClause.append(whereCell.getWherePrefix());
-                delWhereClause.append(whereCell.getForPostFix());
-                // 删除事务Tx1语句中where部分以及Predicate谓词
-                whereCell.setStmt(delWhereClause.toString());
-                whereCell.setPredicate(null);
-                whereCell.setWhereClause("");
-                
-                if (oracleChecker.hasBug(clonedTestCase.toString())) {
-                    log.info("whereSQL [{}] simpilify success",whereCell.getStatement().toString());
-                    // 删除后仍能复现bug则更新测试用例
-                    testCase = testCaseClone(clonedTestCase); 
-                } else {
-                    log.info("whereSQL [{}] simpilify failed",whereCell.getStatement().toString());
-                }
+        // 选取需要简化的类型
+        StatementType type = constantSimplifySelector.selectNext();
+     //   StatementType type = StatementType.UPDATE;
+        ArrayList <StatementCell> stmtListForType = new ArrayList<>();
+        for(StatementCell stmt : clonedTestCase.prepareTableStmts){
+            if(stmt.getType().toString().equals(type.toString())){
+                stmtListForType.add(stmt);
             }
         }
-        return testCase;
-    }
-    private TestCase delWhereClauseTx2(TestCase testCase, OracleChecker oracleChecker){
-        TestCase clonedTestCase = testCaseClone(testCase);
-        for(StatementCell whereCell : clonedTestCase.tx2.getStatements()){
-            if(whereCell.getWhereClause() != ""){
-              //  StatementCell whereCellCopy = whereCell.copy();
-                StringBuffer delWhereClause = new StringBuffer();
-                delWhereClause.append(whereCell.getWherePrefix());
-                delWhereClause.append(whereCell.getForPostFix());
-                // 删除事务Tx2语句中where部分以及Predicate谓词
-                whereCell.setStmt(delWhereClause.toString());
-                whereCell.setPredicate(null);
-                whereCell.setWhereClause("");
-                
-                if (oracleChecker.hasBug(clonedTestCase.toString())) {
-                    log.info("whereSQL [{}] simpilify success",whereCell.getStatement().toString());
-                    // 删除后仍能复现bug则更新测试用例
-                    testCase = testCaseClone(clonedTestCase); 
-                } else {
-                    log.info("whereSQL [{}] simpilify failed",whereCell.getStatement().toString());
-                }
+        for(StatementCell stmt : clonedTestCase.tx1.getStatements()){
+            if(stmt.getType().toString().equals(type.toString())){
+                stmtListForType.add(stmt);
             }
         }
-        return testCase;
-    }
-    private TestCase delInsertColPre(TestCase testCase, OracleChecker oracleChecker){
-        TestCase clonedTestCase = testCaseClone(testCase);
-        for (StatementCell insertCell : clonedTestCase.prepareTableStmts){
-            if (insertCell.getType() == StatementType.INSERT){
-                StatementCell insertCellCopy = insertCell.copy();
-                String insertStmt = insertCellCopy.getStatement();
-                // 取得列名括号对和值括号对的位置
-                int columnLeftBracket = insertStmt.indexOf("(");
-                int columnRightBracket = insertStmt.indexOf(")");
-                int valueLeftBracket = insertStmt.lastIndexOf("(");
-                int valueRightBracket = insertStmt.lastIndexOf(")");
-                // 得到插入列
-                String columnStr = insertStmt.substring(columnLeftBracket+1, columnRightBracket);
-                String[] columnWords = columnStr.split(",");
-                // 得到插入值
-                String valueStr = insertStmt.substring(valueLeftBracket+1, valueRightBracket);
-                String[] valueWords = valueStr.split(",");
-                // 如果只有一列就不删了
-                if(columnWords.length == 1) continue;
-                // 剩下的都是至少两列插入，随机选择一列删除
-                int idx = Randomly.getNextInt(0,columnWords.length-1);
-                StringBuffer newColumnStr = new StringBuffer();
-                StringBuffer newValueStr  = new StringBuffer();
-                for(int i=0, cntVal=0, cntCol=0, cnt=0; i<columnWords.length; i++){
-                    // 不补null的
-                    if(i==idx && idx ==0) continue;
-                    else if(i!=idx && idx!=0){
-                        if(i==0){
-                            newValueStr.append(valueWords[i]);
-                            newColumnStr.append(columnWords[i]);
-                        }
-                        else{
-                            newValueStr.append(","+valueWords[i]);
-                            newColumnStr.append(","+columnWords[i]);
-                        }
-                    }else if(i!=idx && idx==0){
-                        if(cnt==0){
-                            newValueStr.append(valueWords[i].substring(1));
-                            newColumnStr.append(columnWords[i].substring(1));
-                            cnt++;
-                        }
-                        else{
-                            newValueStr.append(","+valueWords[i]);
-                            newColumnStr.append(","+columnWords[i]);
-                            cnt++;
-                        }
-                    }
-                    /*  补null的
-                    if(i==idx && idx==0){
-                        newValueStr.append("null");
-                        cntVal++;
-                    }
-                    else if(i==idx && idx!=0){
-                        newValueStr.append(", null");
-                        cntVal++;
-                    }
-                    else if(i!=idx && idx !=0){
-                        if(cntCol==0 && cntVal == 0){
-                            newValueStr.append(valueWords[i]);
-                            newColumnStr.append(columnWords[i]);
-                            cntVal++;
-                            cntCol++;
-                        }
-                        else if(cntCol!=0){
-                            newValueStr.append(","+valueWords[i]);
-                            newColumnStr.append(","+columnWords[i]);
-                            cntVal++;
-                            cntCol++;
-                        }
-                    }
-                    else if(i!=idx && idx == 0){
-                        if(cntCol==0){
-                            newValueStr.append(","+valueWords[i]);
-                            newColumnStr.append(columnWords[i].substring(1));
-                            cntVal++;
-                            cntCol++;
-                        }
-                        else if(cntCol!=0){
-                            newValueStr.append(","+valueWords[i]);
-                            newColumnStr.append(","+columnWords[i]);
-                            cntVal++;
-                            cntCol++;
-                        }
-                    }*/
-                }
-                StringBuffer newInsertStmt = new StringBuffer();
-                // 将去掉某一列后的column列和value列与原先句子进行拼接 Pre里INSERT句子最后加个";"，事务里不需要
-                newInsertStmt.append(insertStmt.substring(0, columnLeftBracket+1));
-                newInsertStmt.append(newColumnStr.toString());
-                newInsertStmt.append(insertStmt.substring(columnRightBracket, valueLeftBracket+1));                                          
-                newInsertStmt.append(newValueStr.toString());
-                newInsertStmt.append(insertStmt.substring(valueRightBracket)+";");
-                
-                insertCell.setStmt(newInsertStmt.toString());
+        for(StatementCell stmt : clonedTestCase.tx2.getStatements()){
+            if(stmt.getType().toString().equals(type.toString())){
+                stmtListForType.add(stmt);
+            }
+        }
+        if(stmtListForType.size() == 0){
+            log.info("There is no {} SQL",type.toString());
+            return testCase;
+        }
+        int simpilifyIdx = (int) (Math.random() * stmtListForType.size());
+        
+        //int simpilifyIdx = 0;
+        StatementCell constantCell = stmtListForType.get(simpilifyIdx);
+        switch (constantCell.getType().toString()) {
+            case "INSERT":
+                testCase = simplifyConstantOfWherePrefix(constantCell, clonedTestCase, testCase, oracleChecker, type);
+                break;
+            case "SELECT":
+                testCase =simplifyConstantOfWhereClause(constantCell, clonedTestCase, testCase, oracleChecker, type);
+                break;
+            case "UPDATE":
+                testCase =simplifyConstantOfWherePrefixAnbWhereClause(constantCell, clonedTestCase, testCase, oracleChecker, type);
+                break;
 
-                if (oracleChecker.hasBug(clonedTestCase.toString())) {
-                    log.info("insertSQL [{}] simpilify success",insertCell.getStatement().toString());
-                    // 删除后仍能复现bug则更新测试用例
-                    testCase = testCaseClone(clonedTestCase); 
-                } else {
-                    log.info("insertSQL [{}] simpilify failed",insertCell.getStatement().toString());
-                }
-            }
-            
-        }
-        return testCase;
-    }
-    private TestCase delInsertColTx1(TestCase testCase, OracleChecker oracleChecker){
-        TestCase clonedTestCase = testCaseClone(testCase);
-        for (StatementCell insertCell : clonedTestCase.tx1.getStatements()){
-            if (insertCell.getType() == StatementType.INSERT){
-                StatementCell insertCellCopy = insertCell.copy();
-                String insertStmt = insertCellCopy.getStatement();
-                // 取得列名括号对和值括号对的位置
-                int columnLeftBracket = insertStmt.indexOf("(");
-                int columnRightBracket = insertStmt.indexOf(")");
-                int valueLeftBracket = insertStmt.lastIndexOf("(");
-                int valueRightBracket = insertStmt.lastIndexOf(")");
-                // 得到插入列
-                String columnStr = insertStmt.substring(columnLeftBracket+1, columnRightBracket);
-                String[] columnWords = columnStr.split(",");
-                // 得到插入值
-                String valueStr = insertStmt.substring(valueLeftBracket+1, valueRightBracket);
-                String[] valueWords = valueStr.split(",");
-                // 如果只有一列就不删了
-                if(columnWords.length == 1) continue;
-                // 剩下的都是至少两列插入，随机选择一列删除
-                int idx = Randomly.getNextInt(0,columnWords.length-1);
-                StringBuffer newColumnStr = new StringBuffer();
-                StringBuffer newValueStr  = new StringBuffer();
-                for(int i=0, cntVal=0, cntCol=0, cnt=0; i<columnWords.length; i++){
-                    // 不补null的
-                    if(i==idx && idx ==0) continue;
-                    else if(i!=idx && idx!=0){
-                        if(i==0){
-                            newValueStr.append(valueWords[i]);
-                            newColumnStr.append(columnWords[i]);
-                        }
-                        else{
-                            newValueStr.append(","+valueWords[i]);
-                            newColumnStr.append(","+columnWords[i]);
-                        }
-                    }else if(i!=idx && idx==0){
-                        if(cnt==0){
-                            newValueStr.append(valueWords[i].substring(1));
-                            newColumnStr.append(columnWords[i].substring(1));
-                            cnt++;
-                        }
-                        else{
-                            newValueStr.append(","+valueWords[i]);
-                            newColumnStr.append(","+columnWords[i]);
-                            cnt++;
-                        }
-                    }
-                    /*  补null的
-                    if(i==idx && idx==0){
-                        newValueStr.append("null");
-                        cntVal++;
-                    }
-                    else if(i==idx && idx!=0){
-                        newValueStr.append(", null");
-                        cntVal++;
-                    }
-                    else if(i!=idx && idx !=0){
-                        if(cntCol==0 && cntVal == 0){
-                            newValueStr.append(valueWords[i]);
-                            newColumnStr.append(columnWords[i]);
-                            cntVal++;
-                            cntCol++;
-                        }
-                        else if(cntCol!=0){
-                            newValueStr.append(","+valueWords[i]);
-                            newColumnStr.append(","+columnWords[i]);
-                            cntVal++;
-                            cntCol++;
-                        }
-                    }
-                    else if(i!=idx && idx == 0){
-                        if(cntCol==0){
-                            newValueStr.append(","+valueWords[i]);
-                            newColumnStr.append(columnWords[i].substring(1));
-                            cntVal++;
-                            cntCol++;
-                        }
-                        else if(cntCol!=0){
-                            newValueStr.append(","+valueWords[i]);
-                            newColumnStr.append(","+columnWords[i]);
-                            cntVal++;
-                            cntCol++;
-                        }
-                    }*/
-                }
-                StringBuffer newInsertStmt = new StringBuffer();
-                // 将去掉某一列后的column列和value列与原先句子进行拼接 Pre里INSERT句子最后加个";"，事务里不需要
-                newInsertStmt.append(insertStmt.substring(0, columnLeftBracket+1));
-                newInsertStmt.append(newColumnStr.toString());
-                newInsertStmt.append(insertStmt.substring(columnRightBracket, valueLeftBracket+1));                                          
-                newInsertStmt.append(newValueStr.toString());
-                newInsertStmt.append(insertStmt.substring(valueRightBracket));
-                
-                insertCell.setStmt(newInsertStmt.toString());
+            case "SELECT_SHARE":
+                testCase =simplifyConstantOfWhereClause(constantCell, clonedTestCase, testCase, oracleChecker, type);
+                break;
 
-                if (oracleChecker.hasBug(clonedTestCase.toString())) {
-                    log.info("insertSQL [{}] simpilify success",insertCell.getStatement().toString());
-                    // 删除后仍能复现bug则更新测试用例
-                    testCase = testCaseClone(clonedTestCase); 
-                } else {
-                    log.info("insertSQL [{}] simpilify failed",insertCell.getStatement().toString());
-                }
-            }
-            
-        }
-        return testCase;
-    }
-    private TestCase delInsertColTx2(TestCase testCase, OracleChecker oracleChecker){
-        TestCase clonedTestCase = testCaseClone(testCase);
-        for (StatementCell insertCell : clonedTestCase.tx2.getStatements()){
-            if (insertCell.getType() == StatementType.INSERT){
-                StatementCell insertCellCopy = insertCell.copy();
-                String insertStmt = insertCellCopy.getStatement();
-                // 取得列名括号对和值括号对的位置
-                int columnLeftBracket = insertStmt.indexOf("(");
-                int columnRightBracket = insertStmt.indexOf(")");
-                int valueLeftBracket = insertStmt.lastIndexOf("(");
-                int valueRightBracket = insertStmt.lastIndexOf(")");
-                // 得到插入列
-                String columnStr = insertStmt.substring(columnLeftBracket+1, columnRightBracket);
-                String[] columnWords = columnStr.split(",");
-                // 得到插入值
-                String valueStr = insertStmt.substring(valueLeftBracket+1, valueRightBracket);
-                String[] valueWords = valueStr.split(",");
-                // 如果只有一列就不删了
-                if(columnWords.length == 1) continue;
-                // 剩下的都是至少两列插入，随机选择一列删除
-                int idx = Randomly.getNextInt(0,columnWords.length-1);
-                StringBuffer newColumnStr = new StringBuffer();
-                StringBuffer newValueStr  = new StringBuffer();
-                for(int i=0, cntVal=0, cntCol=0, cnt=0; i<columnWords.length; i++){
-                    // 不补null的
-                    if(i==idx && idx ==0) continue;
-                    else if(i!=idx && idx!=0){
-                        if(i==0){
-                            newValueStr.append(valueWords[i]);
-                            newColumnStr.append(columnWords[i]);
-                        }
-                        else{
-                            newValueStr.append(","+valueWords[i]);
-                            newColumnStr.append(","+columnWords[i]);
-                        }
-                    }else if(i!=idx && idx==0){
-                        if(cnt==0){
-                            newValueStr.append(valueWords[i].substring(1));
-                            newColumnStr.append(columnWords[i].substring(1));
-                            cnt++;
-                        }
-                        else{
-                            newValueStr.append(","+valueWords[i]);
-                            newColumnStr.append(","+columnWords[i]);
-                            cnt++;
-                        }
-                    }
-                    /*  补null的
-                    if(i==idx && idx==0){
-                        newValueStr.append("null");
-                        cntVal++;
-                    }
-                    else if(i==idx && idx!=0){
-                        newValueStr.append(", null");
-                        cntVal++;
-                    }
-                    else if(i!=idx && idx !=0){
-                        if(cntCol==0 && cntVal == 0){
-                            newValueStr.append(valueWords[i]);
-                            newColumnStr.append(columnWords[i]);
-                            cntVal++;
-                            cntCol++;
-                        }
-                        else if(cntCol!=0){
-                            newValueStr.append(","+valueWords[i]);
-                            newColumnStr.append(","+columnWords[i]);
-                            cntVal++;
-                            cntCol++;
-                        }
-                    }
-                    else if(i!=idx && idx == 0){
-                        if(cntCol==0){
-                            newValueStr.append(","+valueWords[i]);
-                            newColumnStr.append(columnWords[i].substring(1));
-                            cntVal++;
-                            cntCol++;
-                        }
-                        else if(cntCol!=0){
-                            newValueStr.append(","+valueWords[i]);
-                            newColumnStr.append(","+columnWords[i]);
-                            cntVal++;
-                            cntCol++;
-                        }
-                    }*/
-                }
-                // 将去掉某一列后的column列和value列与原先句子进行拼接 Pre里INSERT句子最后加个";"，事务里不需要
-                StringBuffer newInsertStmt = new StringBuffer();
-                newInsertStmt.append(insertStmt.substring(0, columnLeftBracket+1));
-                newInsertStmt.append(newColumnStr.toString());
-                newInsertStmt.append(insertStmt.substring(columnRightBracket, valueLeftBracket+1));                                          
-                newInsertStmt.append(newValueStr.toString());
-                newInsertStmt.append(insertStmt.substring(valueRightBracket));
-                
-                insertCell.setStmt(newInsertStmt.toString());
+            case "SELECT_UPDATE":
+                testCase =simplifyConstantOfWhereClause(constantCell, clonedTestCase, testCase, oracleChecker, type);
+                break;
 
-                if (oracleChecker.hasBug(clonedTestCase.toString())) {
-                    log.info("insertSQL [{}] simpilify success",insertCell.getStatement().toString());
-                    // 删除后仍能复现bug则更新测试用例
-                    testCase = testCaseClone(clonedTestCase); 
-                } else {
-                    log.info("insertSQL [{}] simpilify failed",insertCell.getStatement().toString());
-                }
-            }
-            
+            case "DELETE":
+                testCase =simplifyConstantOfWhereClause(constantCell, clonedTestCase, testCase, oracleChecker, type);
+                break;
         }
         return testCase;
     }
-    private TestCase delUpdateColTx1(TestCase testCase, OracleChecker oracleChecker){
-        TestCase clonedTestCase = testCaseClone(testCase);
-        for (StatementCell upCell : clonedTestCase.tx1.getStatements()) {
-            if (upCell.getType() == StatementType.UPDATE) {
-                StatementCell cloneUpCell = upCell.copy();
-                String upStmt = cloneUpCell.getStatement();
-                // 将SET和WHERE转变成“，”，这样的话以第一个和最后一个“，”就会包含更新列项 将其subString提取出来
-                String replacedUpStmt = upStmt.replace("SET", "WHERE");
-                String finalReplacedUpStmt = replacedUpStmt.replace("WHERE",",");
-               // System.out.println(finalReplacedUpStmt);
-                int firstCommaIdx = finalReplacedUpStmt.indexOf(",");
-                int lastCommaIdx = finalReplacedUpStmt.lastIndexOf(",");
-                String updateStr = finalReplacedUpStmt.substring(firstCommaIdx+1, lastCommaIdx-1);
-                // 获取更新列项
-                String[] updateWords = updateStr.split(",");
-                // 如果只有一个则不进行简化
-                if(updateWords.length==1) continue;
-                int idx = Randomly.getNextInt(0, updateWords.length-1);
-                // 删除并重新拼接
-                StringBuffer updateStmt = new StringBuffer();
-                for(int i=0, cnt=0; i<updateWords.length;i++){
-                    if(i==idx) continue;
-                    else{
-                        if(cnt==0){
-                            updateStmt.append(updateWords[i]);
-                            cnt++;
-                        }else{
-                            updateStmt.append(","+updateWords[i]);
-                        }
+    private TestCase simplifyConstantOfWherePrefix(StatementCell constantCell, TestCase clonedTestCase, TestCase testCase, OracleChecker oracleChecker, StatementType type){
+        StatementCell constantCellCopy = constantCell.copy();
+        // 获得一条insert语句
+        String insertStmt = constantCellCopy.getStatement();
+        // 取得值括号对的位置
+        int valueLeftBracket = insertStmt.lastIndexOf("(");
+        int valueRightBracket = insertStmt.lastIndexOf(")");
+
+        // 得到插入值
+        String valueStr = insertStmt.substring(valueLeftBracket+1, valueRightBracket);
+        String[] valueWords = valueStr.split(",");
+
+        int colLength = valueWords.length;
+        for(int idx=0; idx<colLength; idx++){
+            Integer num = Randomly.getNextInt(-10, 10);
+            String numStr = num.toString();
+            if(idx == 0 )
+                valueWords[idx] = numStr;
+            else
+                valueWords[idx] = " "+numStr;
+            StringBuffer newValueStr = new StringBuffer();
+            for(int i=0; i<colLength; i++){
+                if(i==0)
+                    newValueStr.append(valueWords[i]); 
+                else
+                    newValueStr.append(","+valueWords[i]);
+                
+            }
+            StringBuffer newInsertStmt = new StringBuffer();
+            newInsertStmt.append(insertStmt.substring(0, valueLeftBracket+1));
+            newInsertStmt.append(newValueStr.toString());
+            newInsertStmt.append(insertStmt.substring(valueRightBracket));
+            constantCell.setStmt(newInsertStmt.toString());
+           
+            if (oracleChecker.hasBug(clonedTestCase.toString())) {
+                log.info("Constant of wherePrefixSQL [{}] simpilify success",constantCell.toString()+":"+constantCell.getStatement().toString());
+                // 删除后仍能复现bug则更新测试用例
+                testCase = testCaseClone(clonedTestCase); 
+                
+            } else {
+                log.info("Constant of wherePrefixSQL [{}] simpilify failed",constantCell.toString()+":"+constantCell.getStatement().toString());
+                constantCell = constantCellCopy;
+            }
+            constantCellCopy = constantCell.copy();
+            // 获得一条insert语句
+            insertStmt = constantCellCopy.getStatement();
+            // 取得值括号对的位置
+            valueLeftBracket = insertStmt.lastIndexOf("(");
+            valueRightBracket = insertStmt.lastIndexOf(")");
+            // 得到插入值
+            valueStr = insertStmt.substring(valueLeftBracket+1, valueRightBracket);
+            valueWords = valueStr.split(",");
+            colLength = valueWords.length;
+        }
+        return testCase;
+    }
+    private TestCase simplifyConstantOfWhereClause(StatementCell constantCell, TestCase clonedTestCase, TestCase testCase, OracleChecker oracleChecker, StatementType type){
+        StatementCell constantCellCopy = constantCell.copy();
+        MySQLExpression rootPredicate = constantCell.getPredicate();
+        if(rootPredicate == null){
+            log.info("Constant of whereClauseSQL [{}] can't be simpilified ",constantCell.toString()+":"+constantCell.getStatement().toString()); 
+            return testCase; 
+        }
+        LinkedList <MySQLExpression> nodeQueue = new LinkedList<>();
+        nodeQueue.add(rootPredicate);
+        while (!nodeQueue.isEmpty()){
+            MySQLExpression node = nodeQueue.getFirst();
+            nodeQueue.removeFirst();
+            // 如果是常量节点的话
+            if(judgeConstantNode(node.getClass().getSimpleName())){
+                long num = Randomly.getNextInt(-10, 10);
+                MySQLIntConstant nodeInt = (MySQLIntConstant) node;
+                nodeInt.setIntConstant(num, String.valueOf(num));
+                constantCell.setWhereClause(MySQLVisitor.asString(rootPredicate));
+                constantCell.setStmt(constantCell.getWherePrefix()+" WHERE "+constantCell.getWhereClause()+" "+constantCell.getForPostFix());
+                if (oracleChecker.hasBug(clonedTestCase.toString())) {
+                    log.info("Constant of whereClauseSQL [{}] simpilify success ",constantCell.toString()+":"+constantCell.getStatement().toString());
+                    // 删除后仍能复现bug则更新测试用例
+                    testCase = testCaseClone(clonedTestCase); 
+                    constantSimplifySelector.updateWeight(type, true);
+                } else {
+                    log.info("Constant of whereClauseSQL [{}] simpilify failed ",constantCell.toString()+":"+constantCell.getStatement().toString());
+                    if(nodeQueue.isEmpty()){
+                        // 后续要修改
+                        constantSimplifySelector.updateWeight(type, false);
+                        break;
                     }
+                } 
+            }
+            else{
+                switch (node.getClass().getSimpleName()) {
+                    case "MySQLBetweenOperation":
+                        MySQLBetweenOperation tmpNodeForBetweenOperation = (MySQLBetweenOperation) node;
+                        nodeQueue.add(tmpNodeForBetweenOperation.getExpr());
+                        nodeQueue.add(tmpNodeForBetweenOperation.getLeft());
+                        nodeQueue.add(tmpNodeForBetweenOperation.getRight());
+                        break;
+
+                    case "MySQLBinaryComparsionOperation" :
+                        MySQLBinaryComparisonOperation tmpNodeForBinaryComp = (MySQLBinaryComparisonOperation) node;
+                        nodeQueue.add(tmpNodeForBinaryComp.getLeft());
+                        nodeQueue.add(tmpNodeForBinaryComp.getRight());
+                        break;
+                    
+                    case "MySQLBinaryLogicalOperation" :
+                        MySQLBinaryLogicalOperation tmpNodeForBinaryLog = (MySQLBinaryLogicalOperation) node;
+                        nodeQueue.add(tmpNodeForBinaryLog.getLeft());
+                        nodeQueue.add(tmpNodeForBinaryLog.getRight());
+                        break;
+
+                    case "MySQLBinaryOperation" :
+                        MySQLBinaryOperation tmpNodeForBinary = (MySQLBinaryOperation) node;
+                        nodeQueue.add(tmpNodeForBinary.getLeft());
+                        nodeQueue.add(tmpNodeForBinary.getRight());
+                        break;
+
+                    case "MySQLCastOperation" :
+                        MySQLCastOperation tmpNodeForCast = (MySQLCastOperation) node;
+                        nodeQueue.add(tmpNodeForCast.getExpr());
+                        break;
+
+                    case "MySQLInOperation" :
+                        MySQLInOperation tmpNodeForIn = (MySQLInOperation) node;
+                        nodeQueue.add(tmpNodeForIn.getExpr());
+                        
+                        for(MySQLExpression tmpNodeIn : tmpNodeForIn.getListElements()){
+                            nodeQueue.add(tmpNodeIn);
+                        }
+                        
+                        break;
+
+                    case "MySQLUnaryPostfixOperation" :
+                        MySQLUnaryPostfixOperation tmpNodeForUnaryPostFix = (MySQLUnaryPostfixOperation) node;
+                        nodeQueue.add(tmpNodeForUnaryPostFix.getExpression());
+                        break;
+
+                    case "MySQLUnaryfixOperation":
+                        MySQLUnaryPrefixOperation tmpNodeForUnaryPreFix = (MySQLUnaryPrefixOperation) node;
+                        nodeQueue.add(tmpNodeForUnaryPreFix.getExpression());
+                        break;
                 }
-                updateStmt.append(" ");
-                StringBuffer replacedUpdateStr = new StringBuffer();
-                StringBuffer replacedUpdateStrPrefix = new StringBuffer();
+            }
+
+        }
+        return testCase;
+    }
     
-                replacedUpdateStr.append(finalReplacedUpStmt);
-                replacedUpdateStr.replace(firstCommaIdx+1, lastCommaIdx, updateStmt.toString());
-               
-                replacedUpdateStr.insert(replacedUpdateStr.toString().indexOf(",")+1, "SET");
-                replacedUpdateStrPrefix.append(replacedUpdateStr.toString());
+    private TestCase simplifyConstantOfWherePrefixAnbWhereClause(StatementCell constantCell, TestCase clonedTestCase, TestCase testCase, OracleChecker oracleChecker, StatementType type){
+        StatementCell constantCellCopy = constantCell.copy();
+        if(constantCellCopy.getWhereClause()=="")
+            constantCellCopy.setStmt(constantCellCopy.getStatement()+" WHERE");
+        // 获得一条insert语句
+        String updatetStmt = constantCellCopy.getStatement();
+        String replacedUpdatestmt = updatetStmt.replace("SET", "@");
+        String finalReplacedUpdatestmt = replacedUpdatestmt.replace("WHERE", "@");
+        // 取得更新列对的位置
+        int updateColLeftIdx = finalReplacedUpdatestmt.indexOf("@");
+        int updateColRightIdx = finalReplacedUpdatestmt.lastIndexOf("@");
 
-                replacedUpdateStr.insert(replacedUpdateStr.toString().lastIndexOf(",")+1,"WHERE");
-                replacedUpdateStr.deleteCharAt(replacedUpdateStr.toString().indexOf(","));
-                replacedUpdateStrPrefix.deleteCharAt(replacedUpdateStrPrefix.toString().indexOf(","));
-                replacedUpdateStr.deleteCharAt(replacedUpdateStr.toString().lastIndexOf(","));
+        // 得到更新列对
+        String updateColStr = finalReplacedUpdatestmt.substring(updateColLeftIdx+1, updateColRightIdx-1);
+        String[] updateColWords = updateColStr.split(",");
+        int colLength = updateColWords.length;
 
-                upCell.setStmt(replacedUpdateStr.toString());
-                upCell.setWherePrefix(replacedUpdateStrPrefix.substring(0, replacedUpdateStrPrefix.toString().lastIndexOf(",")-1));
+        for(int idx=0; idx<colLength; idx++){
+            Integer num = Randomly.getNextInt(-10, 10);
+            String numStr = num.toString();
+            int equalIdx = updateColWords[idx].indexOf("=");
+            updateColWords[idx] = updateColWords[idx].substring(0, equalIdx+1)+numStr;
+            StringBuffer newUpdateColStr = new StringBuffer();
+            for(int i=0; i<colLength; i++){
+                if(i==0)
+                    newUpdateColStr.append(updateColWords[i]);
+                else
+                    newUpdateColStr.append(","+updateColWords[i]);
+            }
+            newUpdateColStr.append(" ");
+
+            StringBuffer newUpdateCol = new StringBuffer();
+            StringBuffer newUpdateColWherePrefix = new StringBuffer();
+
+            newUpdateCol.append(finalReplacedUpdatestmt);
+            newUpdateCol.replace(updateColLeftIdx+1, updateColRightIdx, newUpdateColStr.toString());
+
+            newUpdateCol.insert(newUpdateCol.toString().indexOf("@")+1, "SET");
+            newUpdateColWherePrefix.append(newUpdateCol.toString());
+            if(!constantCell.getWhereClause().equals(""))
+                newUpdateCol.insert(newUpdateCol.toString().lastIndexOf("@")+1, "WHERE");
+            
+            newUpdateCol.deleteCharAt(newUpdateCol.toString().indexOf("@"));
+            newUpdateColWherePrefix.deleteCharAt(newUpdateColWherePrefix.toString().indexOf("@"));
+            newUpdateCol.deleteCharAt(newUpdateCol.toString().lastIndexOf("@"));
+            
+            constantCell.setStmt(newUpdateCol.toString());
+            constantCell.setWherePrefix(newUpdateColWherePrefix.substring(0, newUpdateColWherePrefix.toString().lastIndexOf("@")-1));
+            if (oracleChecker.hasBug(clonedTestCase.toString())) {
+                log.info("Constant of wherePrefixAndWhereClauseSQL [{}] simpilify success",constantCell.toString()+":"+constantCell.getStatement().toString());
+                // 删除后仍能复现bug则更新测试用例
+                testCase = testCaseClone(clonedTestCase); 
+                
+            } else {
+                log.info("Constant of wherePrefixAndWhereClauseSQL [{}] simpilify failed",constantCell.toString()+":"+constantCell.getStatement().toString());
+                constantCell = constantCellCopy;
+            }
+            constantCellCopy = constantCell.copy();
+            if(constantCellCopy.getWhereClause()=="")
+                constantCellCopy.setStmt(constantCellCopy.getStatement()+" WHERE");
+            // 获得一条insert语句
+            updatetStmt = constantCellCopy.getStatement();
+            replacedUpdatestmt = updatetStmt.replace("SET", "@");
+            finalReplacedUpdatestmt = replacedUpdatestmt.replace("WHERE", "@");
+            // 取得更新列对的位置
+            updateColLeftIdx = finalReplacedUpdatestmt.indexOf("@");
+            updateColRightIdx = finalReplacedUpdatestmt.lastIndexOf("@");
+
+            // 得到更新列对
+            updateColStr = finalReplacedUpdatestmt.substring(updateColLeftIdx+1, updateColRightIdx-1);
+            updateColWords = updateColStr.split(",");
+            colLength = updateColWords.length;
+        }
+        // 到时候修改
+        if(constantCell.getPredicate() == null){
+            constantSimplifySelector.updateWeight(type, false);
+            return testCase;
+        }
+        testCase = simplifyConstantOfWhereClause(constantCellCopy, clonedTestCase, testCase, oracleChecker, type);
+        return testCase;
+    }
+    private TestCase simplifyWhereExpr(TestCase testCase, OracleChecker oracleChecker){
+        TestCase clonedTestCase = testCaseClone(testCase);
+        ArrayList<StatementCell> whereStmtList = new ArrayList<>();
+        for (StatementCell whereStmt : clonedTestCase.tx1.getStatements()){
+            if(whereStmt.getWhereClause() != "")
+                whereStmtList.add(whereStmt);
+        }
+        for (StatementCell whereStmt : clonedTestCase.tx2.getStatements()){
+            if(whereStmt.getWhereClause() != "")
+                whereStmtList.add(whereStmt);
+        }
+        if(whereStmtList.size() == 0){
+            log.info("There is no whereSQL");
+            // 删除后仍能复现bug则更新测试用例
+            return testCase;
+        }
+        int simpilifyIdx = (int) (Math.random() * whereStmtList.size());
+      //  int simpilifyIdx = 7;
+        StatementCell whereCell = whereStmtList.get(simpilifyIdx);
+        // 给predicate建立一个虚的父节点
+        MySQLExpression rootPredicate = whereCell.getPredicate();
+        MySQLDummyExpression dummyNode = new MySQLDummyExpression(rootPredicate);
+        Pair<MySQLExpression, MySQLExpression> rootNode = new Pair<>(dummyNode, rootPredicate);
+       // Queue <MySQLExpression> nodeQueue = new LinkedList<>();
+        LinkedList<Pair<MySQLExpression,MySQLExpression>> nodeQueue = new LinkedList<>();
+        nodeQueue.add(rootNode);
+        WhereExprType exprType = exprSimplifySelector.selectNext();
+        //WhereExprType exprType = WhereExprType.MySQLBinaryLogicalOperation;
+        while (!nodeQueue.isEmpty()) {
+            //  MySQLExpression nodePredicate = nodeQueue.getFirst();
+            Pair<MySQLExpression, MySQLExpression> node = nodeQueue.getFirst();
+            nodeQueue.removeFirst();
+            // 判断当前节点是否符合type类型
+            if(node.right.getClass().getSimpleName().equals(exprType.toString())){
+                // int start = -10;
+                // int end = 10;
+                // long num = new Random().nextInt(end - start +1) + start;
+                long num = Randomly.getNextInt(0,1);
+                MySQLExpression nodeInt = new MySQLIntConstant(num, true);
+                switch (node.left.getClass().getSimpleName()) {
+                    case "MySQLDummyExpression":
+                        MySQLDummyExpression tmpNodeForDummy = (MySQLDummyExpression) node.left;
+                        tmpNodeForDummy.setNode(nodeInt);
+                        break;
+                    case "MySQLBetweenOperation":
+                        MySQLBetweenOperation tmpNodeForBetween = (MySQLBetweenOperation) node.left;
+                        if(tmpNodeForBetween.getExpr() == node.right){
+                            tmpNodeForBetween.setExpr(nodeInt);
+                        }
+                        else if(tmpNodeForBetween.getLeft() == node.right){
+                            tmpNodeForBetween.setLeft(nodeInt);
+                        }
+                        else if(tmpNodeForBetween.getRight() == node.right){
+                            tmpNodeForBetween.setRight(nodeInt);
+                        }
+                        break;
+
+                    case "MySQLBinaryComparsionOperation" :
+                        MySQLBinaryComparisonOperation tmpNodeForBinaryComp = (MySQLBinaryComparisonOperation) node.left;
+                        if(tmpNodeForBinaryComp.getLeft() == node.right){
+                            tmpNodeForBinaryComp.setLeft(nodeInt);
+                        }
+                        else if(tmpNodeForBinaryComp.getRight() == node.right){
+                            tmpNodeForBinaryComp.setRight(nodeInt);
+                        }
+                        break;
+                    
+                    case "MySQLBinaryLogicalOperation" :
+                        MySQLBinaryLogicalOperation tmpNodeForBinaryLog = (MySQLBinaryLogicalOperation) node.left;
+                        if(tmpNodeForBinaryLog.getLeft() == node.right){
+                            tmpNodeForBinaryLog.setLeft(nodeInt);
+                        }
+                        else if(tmpNodeForBinaryLog.getRight() == node.right){
+                            tmpNodeForBinaryLog.setRight(nodeInt);
+                        }
+                        break;
+
+                    case "MySQLBinaryOperation" :
+                        MySQLBinaryOperation tmpNodeForBinary = (MySQLBinaryOperation) node.left;
+                        if(tmpNodeForBinary.getLeft() == node.right){
+                            tmpNodeForBinary.setLeft(nodeInt);
+                        }
+                        else if(tmpNodeForBinary.getRight() == node.right){
+                            tmpNodeForBinary.setRight(nodeInt);
+                        }
+                        break;
+
+                    case "MySQLCastOperation" :
+                        MySQLCastOperation tmpNodeForCast = (MySQLCastOperation) node.left;
+                        tmpNodeForCast.setExpr(nodeInt);    
+                        break;
+
+                    case "MySQLInOperation" :
+                        MySQLInOperation tmpNodeForIn = (MySQLInOperation) node.left;
+                        if(tmpNodeForIn.getExpr() == node.right){
+                            tmpNodeForIn.setExpr(nodeInt);
+                        } 
+                        else{
+                            for(int i=0; i<tmpNodeForIn.getListElements().size(); i++){
+                                if(tmpNodeForIn.getListElements().get(i) == node.right){
+                                    tmpNodeForIn.getListElements().remove(i);
+                                    tmpNodeForIn.getListElements().add(i, nodeInt);
+                                    break;
+                                }
+                            }
+                            
+                        }
+                        break;
+
+                    case "MySQLUnaryPostfixOperation" :
+                        MySQLUnaryPostfixOperation tmpNodeForUnaryPostFix = (MySQLUnaryPostfixOperation) node.left;
+                        tmpNodeForUnaryPostFix.setExpression(nodeInt);
+                        break;
+
+                    case "MySQLUnaryfixOperation":
+                        MySQLUnaryPrefixOperation tmpNodeForUnaryPrefix = (MySQLUnaryPrefixOperation) node.left;
+                        tmpNodeForUnaryPrefix.setExpr(nodeInt);
+                        break;
+
+                }
+                whereCell.setPredicate(dummyNode.getNode());
+                whereCell.setWhereClause(MySQLVisitor.asString(whereCell.getPredicate()));
+                whereCell.setStmt(whereCell.getWherePrefix()+" WHERE "+whereCell.getWhereClause()+" "+whereCell.getForPostFix());
                 if (oracleChecker.hasBug(clonedTestCase.toString())) {
-                    log.info("updateSQL [{}] simpilify success",upCell.getStatement().toString());
+                    log.info("[{}] whereSQL Expr [{}] simpilify success",exprType,whereCell.toString()+":"+whereCell.getStatement().toString());
                     // 删除后仍能复现bug则更新测试用例
                     testCase = testCaseClone(clonedTestCase); 
+                    exprSimplifySelector.updateWeight(exprType, true);
+                    break;
                 } else {
-                    log.info("updateSQL [{}] simpilify failed",upCell.getStatement().toString());
+                    log.info("[{}] whereSQL Expr[{}] simpilify failed",exprType,whereCell.toString()+":"+whereCell.getStatement().toString());
+                    exprSimplifySelector.updateWeight(exprType, false);
+                    break;
+                    // if(nodeQueue.isEmpty()){
+                    //     exprSimplifySelector.updateWeight(exprType, false);
+                    //     break;
+                    // }
+                }   
+            }
+            else{
+                boolean isAllLeafNodes = true;
+                switch (node.right.getClass().getSimpleName()) {
+                    case "MySQLDummyExpression":
+                        MySQLDummyExpression tmpNodeForDummy = (MySQLDummyExpression) node.right;
+                        if(!judgeLeafNode(tmpNodeForDummy.getNode().getClass().getSimpleName())){
+                            addNodeToQueue(isAllLeafNodes, nodeQueue, tmpNodeForDummy, tmpNodeForDummy.getNode());
+                        }
+                        break;
+                    case "MySQLBetweenOperation":
+                        MySQLBetweenOperation tmpNodeForBetweenOperation = (MySQLBetweenOperation) node.right;
+                        if(!judgeLeafNode(tmpNodeForBetweenOperation.getExpr().getClass().getSimpleName())){
+                            addNodeToQueue(isAllLeafNodes, nodeQueue, tmpNodeForBetweenOperation, tmpNodeForBetweenOperation.getExpr());
+                        }
+                        if(!judgeLeafNode(tmpNodeForBetweenOperation.getLeft().getClass().getSimpleName())){
+                            addNodeToQueue(isAllLeafNodes, nodeQueue, tmpNodeForBetweenOperation, tmpNodeForBetweenOperation.getLeft());
+                        }
+                        if(!judgeLeafNode(tmpNodeForBetweenOperation.getRight().getClass().getSimpleName())){
+                            addNodeToQueue(isAllLeafNodes, nodeQueue, tmpNodeForBetweenOperation, tmpNodeForBetweenOperation.getRight());
+                        }
+                        break;
+
+                    case "MySQLBinaryComparsionOperation" :
+                        MySQLBinaryComparisonOperation tmpNodeForBinaryComp = (MySQLBinaryComparisonOperation) node.right;
+                        if(!judgeLeafNode(tmpNodeForBinaryComp.getLeft().getClass().getSimpleName())){
+                            addNodeToQueue(isAllLeafNodes, nodeQueue, tmpNodeForBinaryComp, tmpNodeForBinaryComp.getLeft());
+                        }
+                        if(!judgeLeafNode(tmpNodeForBinaryComp.getRight().getClass().getSimpleName())){
+                            addNodeToQueue(isAllLeafNodes, nodeQueue, tmpNodeForBinaryComp, tmpNodeForBinaryComp.getRight());
+                        }
+                        break;
+                    
+                    case "MySQLBinaryLogicalOperation" :
+                        MySQLBinaryLogicalOperation tmpNodeForBinaryLog = (MySQLBinaryLogicalOperation) node.right;
+                        if(!judgeLeafNode(tmpNodeForBinaryLog.getLeft().getClass().getSimpleName())){
+                            addNodeToQueue(isAllLeafNodes, nodeQueue, tmpNodeForBinaryLog, tmpNodeForBinaryLog.getLeft());
+                        }
+                        if(!judgeLeafNode(tmpNodeForBinaryLog.getRight().getClass().getSimpleName())){
+                            addNodeToQueue(isAllLeafNodes, nodeQueue, tmpNodeForBinaryLog, tmpNodeForBinaryLog.getRight());
+                        }
+                        break;
+
+                    case "MySQLBinaryOperation" :
+                        MySQLBinaryOperation tmpNodeForBinary = (MySQLBinaryOperation) node.right;
+                        if(!judgeLeafNode(tmpNodeForBinary.getLeft().getClass().getSimpleName())){
+                            addNodeToQueue(isAllLeafNodes, nodeQueue, tmpNodeForBinary, tmpNodeForBinary.getLeft());
+                        }
+                        if(!judgeLeafNode(tmpNodeForBinary.getRight().getClass().getSimpleName())){
+                            addNodeToQueue(isAllLeafNodes, nodeQueue, tmpNodeForBinary, tmpNodeForBinary.getRight());
+                        }
+                        break;
+
+                    case "MySQLCastOperation" :
+                        MySQLCastOperation tmpNodeForCast = (MySQLCastOperation) node.right;
+                        if(!judgeLeafNode(tmpNodeForCast.getExpr().getClass().getSimpleName())){
+                            addNodeToQueue(isAllLeafNodes, nodeQueue, tmpNodeForCast, tmpNodeForCast.getExpr());
+                        }
+                        break;
+
+                    case "MySQLInOperation" :
+                        MySQLInOperation tmpNodeForIn = (MySQLInOperation) node.right;
+                        if(!judgeLeafNode(tmpNodeForIn.getExpr().getClass().getSimpleName())){
+                            addNodeToQueue(isAllLeafNodes, nodeQueue, tmpNodeForIn, tmpNodeForIn.getExpr());
+                        }
+                        
+                        for(MySQLExpression tmpNodeIn : tmpNodeForIn.getListElements()){
+                            if(!judgeLeafNode(tmpNodeIn.getClass().getSimpleName())){
+                                addNodeToQueue(isAllLeafNodes, nodeQueue, tmpNodeForIn, tmpNodeIn);
+                            }
+                        }
+                        
+                        break;
+
+                    case "MySQLUnaryPostfixOperation" :
+                        MySQLUnaryPostfixOperation tmpNodeForUnaryPostFix = (MySQLUnaryPostfixOperation) node.right;
+                        if(!judgeLeafNode(tmpNodeForUnaryPostFix.getExpression().getClass().getSimpleName())){
+                            addNodeToQueue(isAllLeafNodes, nodeQueue, tmpNodeForUnaryPostFix, tmpNodeForUnaryPostFix.getExpression());
+                        }
+                        break;
+
+                    case "MySQLUnaryfixOperation":
+                        MySQLUnaryPrefixOperation tmpNodeForUnaryPreFix = (MySQLUnaryPrefixOperation) node.right;
+                        if(!judgeLeafNode(tmpNodeForUnaryPreFix.getExpression().getClass().getSimpleName())){
+                            addNodeToQueue(isAllLeafNodes, nodeQueue, tmpNodeForUnaryPreFix, tmpNodeForUnaryPreFix.getExpression());
+                        }
+                        break;
+
+                }
+
+                if(isAllLeafNodes == true){
+                    if(nodeQueue.isEmpty()){
+                        exprSimplifySelector.updateWeight(exprType, false);
+                        log.info("[{}] whereSQL Expr[{}] can't be simpilified",exprType,whereCell.toString()+":"+whereCell.getStatement().toString());
+                        break;
+                    }
                 }
             }
+     
         }
         return testCase;
     }
-    private TestCase delUpdateColTx2(TestCase testCase, OracleChecker oracleChecker){
+    private void addNodeToQueue(boolean isAllLeafNodes, LinkedList<Pair<MySQLExpression,MySQLExpression>> nodeQueue, MySQLExpression nodeParent, MySQLExpression nodeSon){
+        Pair<MySQLExpression, MySQLExpression> newNode = new Pair<>(nodeParent, nodeSon);
+        nodeQueue.add(newNode);
+        isAllLeafNodes = false;
+    }
+    private boolean judgeLeafNode(String nodeTypeName){
+        if(nodeTypeName.equals(WhereExprType.MySQLIntConstant.toString()) || 
+           nodeTypeName.equals(WhereExprType.MySQLColumnReference.toString())){
+            return true;
+        }
+        return false;
+    }
+    private boolean judgeConstantNode(String nodeTypeName){
+        if(nodeTypeName.equals(WhereExprType.MySQLIntConstant.toString())){
+         return true;
+        }
+        return false;
+    }
+    private TestCase delWhereClause(TestCase testCase, OracleChecker oracleChecker){
         TestCase clonedTestCase = testCaseClone(testCase);
-        for (StatementCell upCell : clonedTestCase.tx2.getStatements()) {
-            if (upCell.getType() == StatementType.UPDATE) {
-                StatementCell cloneUpCell = upCell.copy();
-                String upStmt = cloneUpCell.getStatement();
-                // 将SET和WHERE转变成“，”，这样的话以第一个和最后一个“，”就会包含更新列项 将其subString提取出来
-                String replacedUpStmt = upStmt.replace("SET", "WHERE");
-                String finalReplacedUpStmt = replacedUpStmt.replace("WHERE",",");
-               // System.out.println(finalReplacedUpStmt);
-                int firstCommaIdx = finalReplacedUpStmt.indexOf(",");
-                int lastCommaIdx = finalReplacedUpStmt.lastIndexOf(",");
-                String updateStr = finalReplacedUpStmt.substring(firstCommaIdx+1, lastCommaIdx-1);
-                // 获取更新列项
-                String[] updateWords = updateStr.split(",");
-                // 如果只有一个则不进行简化
-                if(updateWords.length==1) continue;
-                int idx = Randomly.getNextInt(0, updateWords.length-1);
-                // 删除并重新拼接
-                StringBuffer updateStmt = new StringBuffer();
-                for(int i=0, cnt=0; i<updateWords.length;i++){
-                    if(i==idx) continue;
+        ArrayList<StatementCell> whereStmtList = new ArrayList<>();
+        for (StatementCell whereStmt : clonedTestCase.tx1.getStatements()){
+            if(whereStmt.getWhereClause() != "")
+                whereStmtList.add(whereStmt);
+        }
+        for (StatementCell whereStmt : clonedTestCase.tx2.getStatements()){
+            if(whereStmt.getWhereClause() != "")
+                whereStmtList.add(whereStmt);
+        }
+        if(whereStmtList.size() == 0){
+            log.info("There is no whereSQL");
+            // 删除后仍能复现bug则更新测试用例
+            return testCase;
+        }
+        int simpilifyIdx = (int) (Math.random() * whereStmtList.size());
+       // int simpilifyIdx = 2;
+        StatementCell whereCell = whereStmtList.get(simpilifyIdx);
+        //  StatementCell whereCellCopy = whereCell.copy();
+        StringBuffer delWhereClause = new StringBuffer();
+        delWhereClause.append(whereCell.getWherePrefix());
+        delWhereClause.append(whereCell.getForPostFix());
+        // 删除事务Tx1语句中where部分以及Predicate谓词
+        whereCell.setStmt(delWhereClause.toString());
+        whereCell.setPredicate(null);
+        whereCell.setWhereClause("");
+        
+        if (oracleChecker.hasBug(clonedTestCase.toString())) {
+            log.info("whereSQL [{}] simpilify success",whereCell.toString()+":"+whereCell.getStatement().toString());
+            // 删除后仍能复现bug则更新测试用例
+            testCase = testCaseClone(clonedTestCase); 
+        } else {
+            log.info("whereSQL [{}] simpilify failed",whereCell.toString()+":"+whereCell.getStatement().toString());
+        }      
+        return testCase;
+    }
+    
+    private TestCase delInsertCol(TestCase testCase, OracleChecker oracleChecker){
+        TestCase clonedTestCase = testCaseClone(testCase);
+        ArrayList<StatementCell> insertStmtList = new ArrayList<>();
+        for (StatementCell insertStmt : clonedTestCase.prepareTableStmts){
+            if(insertStmt.getType() == StatementType.INSERT)
+                insertStmtList.add(insertStmt);
+        }
+        for (StatementCell insertStmt : clonedTestCase.tx1.getStatements()){
+            if(insertStmt.getType() == StatementType.INSERT)
+                insertStmtList.add(insertStmt);
+        }
+        for (StatementCell insertStmt : clonedTestCase.tx2.getStatements()){
+            if(insertStmt.getType() == StatementType.INSERT)
+                insertStmtList.add(insertStmt);
+        }
+        int simplifyIdx = (int) (Math.random() * insertStmtList.size());
+        StatementCell insertCell = insertStmtList.get(simplifyIdx);
+        StatementCell insertCellCopy = insertCell.copy();
+        // 随机找个insert语句
+        String insertStmt = insertCellCopy.getStatement();
+        // 取得列名括号对和值括号对的位置
+        int columnLeftBracket = insertStmt.indexOf("(");
+        int columnRightBracket = insertStmt.indexOf(")");
+        int valueLeftBracket = insertStmt.lastIndexOf("(");
+        int valueRightBracket = insertStmt.lastIndexOf(")");
+        // 得到插入列
+        String columnStr = insertStmt.substring(columnLeftBracket+1, columnRightBracket);
+        String[] columnWords = columnStr.split(",");
+        // 得到插入值
+        String valueStr = insertStmt.substring(valueLeftBracket+1, valueRightBracket);
+        String[] valueWords = valueStr.split(",");
+        // 如果只有一列就不删了
+        if(columnWords.length == 1){
+            log.info("insertSQL [{}] can't be simplified",insertCell.toString()+":"+insertCell.getStatement().toString());
+            return testCase;
+        } 
+        // 剩下的都是至少两列插入，随机选择一列删除
+        int colLength = columnWords.length;
+        for(int idx=0; idx<colLength-1;idx++) {
+            StringBuffer newColumnStr = new StringBuffer();
+            StringBuffer newValueStr  = new StringBuffer();
+            for(int i=0, cntVal=0, cntCol=0, cnt=0; i<colLength; i++){
+                // 不补null的
+                if(i==idx && idx ==0) continue;
+                else if(i!=idx && idx!=0){
+                    if(i==0){
+                        newValueStr.append(valueWords[i]);
+                        newColumnStr.append(columnWords[i]);
+                    }
                     else{
-                        if(cnt==0){
-                            updateStmt.append(updateWords[i]);
-                            cnt++;
-                        }else{
-                            updateStmt.append(","+updateWords[i]);
-                        }
+                        newValueStr.append(","+valueWords[i]);
+                        newColumnStr.append(","+columnWords[i]);
+                    }
+                }else if(i!=idx && idx==0){
+                    if(cnt==0){
+                        newValueStr.append(valueWords[i].substring(1));
+                        newColumnStr.append(columnWords[i].substring(1));
+                        cnt++;
+                    }
+                    else{
+                        newValueStr.append(","+valueWords[i]);
+                        newColumnStr.append(","+columnWords[i]);
+                        cnt++;
                     }
                 }
-                updateStmt.append(" ");
-                StringBuffer replacedUpdateStr = new StringBuffer();
-                StringBuffer replacedUpdateStrPrefix = new StringBuffer();
-                replacedUpdateStr.append(finalReplacedUpStmt);
-                replacedUpdateStr.replace(firstCommaIdx+1, lastCommaIdx, updateStmt.toString());
-               
-                replacedUpdateStr.insert(replacedUpdateStr.toString().indexOf(",")+1, "SET");
-                replacedUpdateStrPrefix.append(replacedUpdateStr.toString());
+                /*  补null的
+                if(i==idx && idx==0){
+                    newValueStr.append("null");
+                    cntVal++;
+                }
+                else if(i==idx && idx!=0){
+                    newValueStr.append(", null");
+                    cntVal++;
+                }
+                else if(i!=idx && idx !=0){
+                    if(cntCol==0 && cntVal == 0){
+                        newValueStr.append(valueWords[i]);
+                        newColumnStr.append(columnWords[i]);
+                        cntVal++;
+                        cntCol++;
+                    }
+                    else if(cntCol!=0){
+                        newValueStr.append(","+valueWords[i]);
+                        newColumnStr.append(","+columnWords[i]);
+                        cntVal++;
+                        cntCol++;
+                    }
+                }
+                else if(i!=idx && idx == 0){
+                    if(cntCol==0){
+                        newValueStr.append(","+valueWords[i]);
+                        newColumnStr.append(columnWords[i].substring(1));
+                        cntVal++;
+                        cntCol++;
+                    }
+                    else if(cntCol!=0){
+                        newValueStr.append(","+valueWords[i]);
+                        newColumnStr.append(","+columnWords[i]);
+                        cntVal++;
+                        cntCol++;
+                    }
+                }*/
+            }
+            StringBuffer newInsertStmt = new StringBuffer();
+            // 将去掉某一列后的column列和value列与原先句子进行拼接 Pre里INSERT句子最后加个";"，事务里不需要
+            newInsertStmt.append(insertStmt.substring(0, columnLeftBracket+1));
+            newInsertStmt.append(newColumnStr.toString());
+            newInsertStmt.append(insertStmt.substring(columnRightBracket, valueLeftBracket+1));                                          
+            newInsertStmt.append(newValueStr.toString());
+            newInsertStmt.append(insertStmt.substring(valueRightBracket));
+            insertCell.setStmt(newInsertStmt.toString());
+            
+            if (oracleChecker.hasBug(clonedTestCase.toString())) {
+                log.info("insertSQL [{}] simpilify success",insertCell.toString()+":"+insertCell.getStatement().toString());
+                // 删除后仍能复现bug则更新测试用例
+                testCase = testCaseClone(clonedTestCase); 
+                idx--;
+                insertCell = insertStmtList.get(simplifyIdx);
+            } else {
+                log.info("insertSQL [{}] simpilify failed",insertCell.toString()+":"+insertCell.getStatement().toString());
+                insertCell = insertCellCopy;
+            }
+            // 继续下一轮 把insertCell更新为最新的
+            
+            insertCellCopy = insertCell.copy();
+            // 随机找个insert语句
+            insertStmt = insertCellCopy.getStatement();
+            // 取得列名括号对和值括号对的位置
+            columnLeftBracket = insertStmt.indexOf("(");
+            columnRightBracket = insertStmt.indexOf(")");
+            valueLeftBracket = insertStmt.lastIndexOf("(");
+            valueRightBracket = insertStmt.lastIndexOf(")");
+            // 得到插入列
+            columnStr = insertStmt.substring(columnLeftBracket+1, columnRightBracket);
+            columnWords = columnStr.split(",");
+            // 得到插入值
+            valueStr = insertStmt.substring(valueLeftBracket+1, valueRightBracket);
+            valueWords = valueStr.split(",");
+            colLength = valueWords.length;
+        }
+        
+        return testCase;
+    }
 
-                replacedUpdateStr.insert(replacedUpdateStr.toString().lastIndexOf(",")+1,"WHERE");
-                replacedUpdateStr.deleteCharAt(replacedUpdateStr.toString().indexOf(","));
-                replacedUpdateStrPrefix.deleteCharAt(replacedUpdateStrPrefix.toString().indexOf(","));
-                replacedUpdateStr.deleteCharAt(replacedUpdateStr.toString().lastIndexOf(","));
-
-                upCell.setStmt(replacedUpdateStr.toString());
-                upCell.setWherePrefix(replacedUpdateStrPrefix.substring(0, replacedUpdateStrPrefix.toString().lastIndexOf(",")-1));
-                if (oracleChecker.hasBug(clonedTestCase.toString())) {
-                    log.info("updateSQL [{}] simpilify success",upCell.getStatement().toString());
-                    // 删除后仍能复现bug则更新测试用例
-                    testCase = clonedTestCase; 
-                } else {
-                    log.info("updateSQL [{}] simpilify failed",upCell.getStatement().toString());
+    private TestCase delUpdateCol(TestCase testCase, OracleChecker oracleChecker){
+        TestCase clonedTestCase = testCaseClone(testCase);
+        ArrayList<StatementCell> updateStmtList = new ArrayList<>();
+        for (StatementCell updateStmt : clonedTestCase.tx1.getStatements()){
+            if(updateStmt.getType() == StatementType.UPDATE)
+                updateStmtList.add(updateStmt);
+        }
+        for (StatementCell updateStmt : clonedTestCase.tx2.getStatements()){
+            if(updateStmt.getType() == StatementType.UPDATE)
+                updateStmtList.add(updateStmt);
+        }
+        int simplifyIdx = (int) (Math.random() * updateStmtList.size());
+       // int simplifyIdx = 0;
+        StatementCell upCell = updateStmtList.get(simplifyIdx);
+        StatementCell UpCellCopy = upCell.copy();
+        if(UpCellCopy.getWhereClause()=="") 
+            UpCellCopy.setStmt(UpCellCopy.getStatement()+" WHERE");
+        String upStmt = UpCellCopy.getStatement();
+        // 将SET和WHERE转变成“@”，这样的话以第一个和最后一个“@”就会包含更新列项 将其subString提取出来
+        String replacedUpStmt = upStmt.replace("SET", "WHERE");
+        String finalReplacedUpStmt = replacedUpStmt.replace("WHERE","@");
+        // System.out.println(finalReplacedUpStmt);
+        int firstCommaIdx = finalReplacedUpStmt.indexOf("@");
+        int lastCommaIdx = finalReplacedUpStmt.lastIndexOf("@");
+        // System.out.println("--------------------------------------------------------");
+        // System.out.println(finalReplacedUpStmt);
+        // System.out.println("--------------------------------------------------------");
+        String updateStr = finalReplacedUpStmt.substring(firstCommaIdx+1, lastCommaIdx-1);
+        // 获取更新列项
+        String[] updateWords = updateStr.split(",");
+        // 如果只有一个则不进行简化
+        if(updateWords.length == 1){
+            log.info("updateSQL [{}] can't be simplified",upCell.toString()+":"+upCell.getStatement().toString());
+            return testCase;
+        } 
+        int colLength = updateWords.length;
+        for(int idx=0; idx<colLength-1;idx++) {
+            // 删除并重新拼接
+            StringBuffer updateStmt = new StringBuffer();
+            for(int i=0, cnt=0; i<updateWords.length;i++){
+                if(i==idx) continue;
+                else{
+                    if(cnt==0){
+                        updateStmt.append(updateWords[i]);
+                        cnt++;
+                    }else{
+                        updateStmt.append(","+updateWords[i]);
+                    }
                 }
             }
+            updateStmt.append(" ");
+            StringBuffer replacedUpdateStr = new StringBuffer();
+            StringBuffer replacedUpdateStrPrefix = new StringBuffer();
+
+            replacedUpdateStr.append(finalReplacedUpStmt);
+            replacedUpdateStr.replace(firstCommaIdx+1, lastCommaIdx, updateStmt.toString());
+            
+            replacedUpdateStr.insert(replacedUpdateStr.toString().indexOf("@")+1, "SET");
+            replacedUpdateStrPrefix.append(replacedUpdateStr.toString());
+            if(!upCell.getWhereClause().equals(""))
+             replacedUpdateStr.insert(replacedUpdateStr.toString().lastIndexOf("@")+1,"WHERE");
+
+            replacedUpdateStr.deleteCharAt(replacedUpdateStr.toString().indexOf("@"));
+            replacedUpdateStrPrefix.deleteCharAt(replacedUpdateStrPrefix.toString().indexOf("@"));
+            replacedUpdateStr.deleteCharAt(replacedUpdateStr.toString().lastIndexOf("@"));
+             
+
+            upCell.setStmt(replacedUpdateStr.toString());
+            upCell.setWherePrefix(replacedUpdateStrPrefix.substring(0, replacedUpdateStrPrefix.toString().lastIndexOf("@")-1));
+            if (oracleChecker.hasBug(clonedTestCase.toString())) {
+                log.info("updateSQL [{}] simpilify success",upCell.toString()+":"+upCell.getStatement().toString());
+                // 删除后仍能复现bug则更新测试用例
+                testCase = testCaseClone(clonedTestCase); 
+                idx--;
+                upCell = updateStmtList.get(simplifyIdx);
+            } else {
+                log.info("updateSQL [{}] simpilify failed",upCell.toString()+":"+upCell.getStatement().toString());
+                upCell = UpCellCopy;
+            }
+
+            UpCellCopy = upCell.copy();
+            if(UpCellCopy.getWhereClause()=="") 
+                UpCellCopy.setStmt(UpCellCopy.getStatement()+" WHERE");
+            upStmt = UpCellCopy.getStatement();
+            // 将SET和WHERE转变成“@”，这样的话以第一个和最后一个“@”就会包含更新列项 将其subString提取出来
+            replacedUpStmt = upStmt.replace("SET", "WHERE");
+            finalReplacedUpStmt = replacedUpStmt.replace("WHERE","@");
+            
+            firstCommaIdx = finalReplacedUpStmt.indexOf("@");
+            lastCommaIdx = finalReplacedUpStmt.lastIndexOf("@");
+            updateStr = finalReplacedUpStmt.substring(firstCommaIdx+1, lastCommaIdx-1);
+            // 获取更新列项
+            updateWords = updateStr.split(",");
+            colLength = updateWords.length;
         }
+
         return testCase;
     }
     private StatementCell deleteStatement(TestCase testCase) {

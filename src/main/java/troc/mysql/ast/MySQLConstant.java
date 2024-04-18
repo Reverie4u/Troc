@@ -275,10 +275,25 @@ public abstract class MySQLConstant implements MySQLExpression {
 
     public static class MySQLIntConstant extends MySQLConstant {
 
-        private final long value;
-        private final String stringRepresentation;
-        private final boolean isSigned;
+        private long value;
+        private String stringRepresentation;
+        private boolean isSigned;
 
+        public void setIntConstant(long newValue, boolean newIsSigned){
+            this.value = newValue;
+            this.isSigned = newIsSigned;
+            if (isSigned) {
+                stringRepresentation = String.valueOf(value);
+            } else {
+                stringRepresentation = Long.toUnsignedString(value);
+            }
+        }
+        public void setIntConstant(long newValue, String newStringRepresentation){
+            this.value = newValue;
+            this.stringRepresentation = newStringRepresentation;
+            isSigned = true;
+        }
+        
         public MySQLIntConstant(long value) {
             this(value, true);
         }

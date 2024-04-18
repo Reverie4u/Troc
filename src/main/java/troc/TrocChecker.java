@@ -49,7 +49,7 @@ public class TrocChecker {
         }
         testCase.submittedOrder = submittedOrder;
         if (!oracleCheck(submittedOrder) && TableTool.reducerSwitchOn) {
-            log.info("Find a bug, start reducer");
+            log.info("--------------------------Find a bug, start reducer--------------------------");
             String reducedCase = "";
             switch (TableTool.reducerType) {
                 case "random":
@@ -100,7 +100,7 @@ public class TrocChecker {
             testCase.submittedOrder = submittedOrder;
             boolean res = oracleCheck(submittedOrder);
             if (!res && TableTool.reducerSwitchOn) {
-                log.info("Find a bug, start reducer");
+                log.info("---------------------------Find a bug, start reducer ---------------------------");
                 String reducedCase = "";
                 switch (TableTool.reducerType) {
                     case "random":

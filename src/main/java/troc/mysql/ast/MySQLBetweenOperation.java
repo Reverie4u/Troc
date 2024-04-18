@@ -9,9 +9,9 @@ import troc.mysql.ast.MySQLBinaryLogicalOperation.MySQLBinaryLogicalOperator;
 @Slf4j
 public class MySQLBetweenOperation implements MySQLExpression {
 
-    private final MySQLExpression expr;
-    private final MySQLExpression left;
-    private final MySQLExpression right;
+    private MySQLExpression expr;
+    private MySQLExpression left;
+    private MySQLExpression right;
 
     public MySQLBetweenOperation(MySQLExpression expr, MySQLExpression left, MySQLExpression right) {
         this.expr = expr;
@@ -31,6 +31,17 @@ public class MySQLBetweenOperation implements MySQLExpression {
         return right;
     }
 
+    public void setExpr(MySQLExpression newExpr) {
+        this.expr = newExpr;
+    }
+
+    public void setLeft(MySQLExpression newLeft) {
+        this.left = newLeft;
+    }
+
+    public void setRight(MySQLExpression newRight) {
+        this.right = newRight;
+    }
     @Override
     public MySQLConstant getExpectedValue(Map<String, Object> row) {
         MySQLExpression[] arr = { left, right, expr };

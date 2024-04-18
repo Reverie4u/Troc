@@ -8,8 +8,8 @@ import troc.mysql.ast.MySQLConstant.MySQLDoubleConstant;
 
 public class MySQLColumnReference implements MySQLExpression {
 
-    private final MySQLColumn column;
-    private final MySQLConstant value;
+    private MySQLColumn column;
+    private MySQLConstant value;
 
     public MySQLColumnReference(MySQLColumn column, MySQLConstant value) {
         this.column = column;
@@ -26,6 +26,14 @@ public class MySQLColumnReference implements MySQLExpression {
 
     public MySQLConstant getValue() {
         return value;
+    }
+
+    public void setColumn(MySQLColumn newColumn) {
+        this.column = newColumn;
+    }
+
+    public void setValue(MySQLConstant newValue) {
+        this.value = newValue;
     }
 
     @Override

@@ -4,7 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import troc.Randomly;
-
+import troc.SimplifyType;
+import troc.WhereExprType;
 public class RandomOrderSelector<T> implements OrderSelector<T> {
     List<T> candidates;
 
@@ -25,7 +26,12 @@ public class RandomOrderSelector<T> implements OrderSelector<T> {
         }
         return Randomly.fromList(candidatesCopy);
     }
-
+    
+    @Override
+    public T selectNext() {
+        return Randomly.fromList(candidates);
+    }
+    
     @Override
     public void updateWeight(T candidate, boolean success) {
         // do nothing
