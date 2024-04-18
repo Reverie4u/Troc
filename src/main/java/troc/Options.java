@@ -59,7 +59,7 @@ public class Options {
     private boolean filterDuplicateBug = false;
 
     @Parameter(names = "--reducer", description = "Whether to enable reducer")
-    private boolean reducerSwitchOn = true;
+    private boolean reducerSwitchOn = false;
 
     @Parameter(names = "--reducer-type", description = "Reducer type, can be random, epsilon-greedy, probability-table, all")
     private String reducerType = "random";
