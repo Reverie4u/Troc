@@ -130,10 +130,10 @@ public class TrocChecker {
                 }
                 // 输出原始bug case
                 saveTestCase(testCase.toString(),
-                        TableTool.bugPath + File.pathSeparator + "bug_" + TableTool.bugFound + "_origin.txt");
+                        TableTool.bugPath + File.separator + "bug_" + TableTool.bugFound + "_origin.txt");
                 // 输出简化后的bug case
                 saveTestCase(reducedCase,
-                        TableTool.bugPath + File.pathSeparator + "bug_" + TableTool.bugFound + "_reduced.txt");
+                        TableTool.bugPath + File.separator + "bug_" + TableTool.bugFound + "_reduced.txt");
                 TableTool.bugFound++;
             }
             if (TableTool.isFilterDuplicateBug && !res) {
