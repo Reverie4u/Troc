@@ -66,4 +66,7 @@ public class Options {
 
     @Parameter(names = "--max-reduce-count", description = "The maximum number of reduction")
     private int maxReduceCount = 25;
+
+    @Parameter(names = "--output-dir", description = "")
+    private String outputDir = System.getProperty("user.dir");
 }

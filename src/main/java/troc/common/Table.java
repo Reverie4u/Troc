@@ -97,6 +97,7 @@ public abstract class Table {
             TableTool.executeOnTable(initSQL);
         }
         String query = "SELECT COUNT(*) FROM " + tableName;
+        log.info("query: {}", query);
         initRowCount = TableTool.executeQueryReturnInteger(query);
         log.info("Rowcount: {}", initRowCount);
     }
