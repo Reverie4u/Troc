@@ -1,6 +1,6 @@
 package troc;
 
 public enum SimplifyType {
-    DEL_EXPRE, DEK_INSERT_COL, DEL_UPDATE_COL,
-    SIMPLIFY_TABLE, 
+    DEL_EXPRE, DEL_INSERT_COL, DEL_UPDATE_COL,
+    SIMPLIFY_TABLE,  DEL_SELECT_ROL,
 }

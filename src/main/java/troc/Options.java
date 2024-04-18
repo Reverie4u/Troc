@@ -65,5 +65,5 @@ public class Options {
     private String reducerType = "random";
 
     @Parameter(names = "--max-reduce-count", description = "The maximum number of reduction")
-    private int maxReduceCount = 25;
+    private int maxReduceCount = 10;
 }

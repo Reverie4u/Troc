@@ -129,9 +129,9 @@ public class Main {
                 } catch (InterruptedException e) {
                 }
                 Table table = TableTool.dbms.buildTable(options.getTableName());
+                table.initialize();
                 // 建表及插入语句已保证同步
-                if (table.getInitRowCount() == 0) {
-                    table.initialize();
+                if (table.getInitRowCount() == 0) {       
                     log.info("Table is empty, skip.");
                     continue;
                 }
