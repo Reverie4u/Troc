@@ -868,6 +868,10 @@ public class Reducer {
             if (insertStmt.getType() == StatementType.INSERT)
                 insertStmtList.add(insertStmt);
         }
+        if (insertStmtList.isEmpty()) {
+            log.info("there is no insertSQL");
+            return testCase;
+        }
         int simplifyIdx = (int) (Math.random() * insertStmtList.size());
         StatementCell insertCell = insertStmtList.get(simplifyIdx);
         StatementCell insertCellCopy = insertCell.copy();
@@ -1011,6 +1015,10 @@ public class Reducer {
         for (StatementCell updateStmt : clonedTestCase.tx2.getStatements()) {
             if (updateStmt.getType() == StatementType.UPDATE)
                 updateStmtList.add(updateStmt);
+        }
+        if (updateStmtList.isEmpty()) {
+            log.info("there is no updateStmt");
+            return testCase;
         }
         int simplifyIdx = (int) (Math.random() * updateStmtList.size());
         // int simplifyIdx = 0;
