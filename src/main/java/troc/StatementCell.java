@@ -83,7 +83,6 @@ public class StatementCell {
         this.tx = tx;
         this.statementId = statementId;
     }
-
     public StatementCell(Transaction tx, int statementId, String statement) {
         this.tx = tx;
         this.statementId = statementId;

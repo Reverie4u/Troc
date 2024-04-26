@@ -69,7 +69,7 @@ public class ProbabilityTableBasedOrderSelector<T> implements OrderSelector<T> {
             weight = -1;
         }
         // weight只能是-1.0或者1.0
-        int newWeight = candidatesMap.get(candidate) + weight * step;
+        int newWeight = candidatesMap.get(candidate) + weight * step *(candidatesMap.size()-1);
         candidatesMap.put(candidate, newWeight);
         // 更新其他的权重
         for (T key : candidatesMap.keySet()) {

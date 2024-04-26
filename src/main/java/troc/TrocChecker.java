@@ -106,14 +106,17 @@ public class TrocChecker {
                     case "random":
                         reducedCase = TableTool.randomReducer.reduce(testCase.toString());
                         log.info("Random reducer result: \n{}", reducedCase);
+                        TableTool.randomReducer.getStatistics();
                         break;
                     case "probability-table":
                         reducedCase = TableTool.probabilityTableReducer.reduce(testCase.toString());
                         log.info("Probability-table reducer result: \n{}", reducedCase);
+                        TableTool.randomReducer.getStatistics();
                         break;
                     case "epsilon-greedy":
                         reducedCase = TableTool.epsilonGreedyReducer.reduce(testCase.toString());
                         log.info("Epsilon-greedy reducer result: \n{}", reducedCase);
+                        TableTool.randomReducer.getStatistics();
                         break;
                     case "all":
                         reducedCase = TableTool.randomReducer.reduce(testCase.toString());

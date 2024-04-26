@@ -49,18 +49,31 @@ public class Reducer {
     Map<StatementType, ArrayList<StatementCell>> stmtTypeMap;
     // 第一层简化失败的语句map
     Map<StatementType, ArrayList<StatementCell>> stmtTypeFailMap;
-    // 最大简化次数
+    // 分层简化模型每层最大简化次数
     int maxReduceCount = 0;
     // 所有简化次数
     int allReduceCount = 0;
     // 有效简化次数
     int vaildReduceCount = 0;
+    // 每一层的成功简化次数
+    int[] validReduceCountForEachLevel;
+    // 每一层的简化次数
+    int[] reduceCountForEachLevel;
+    // 每层的有效简化率 = 每一层的成功简化次数/每一层的简化次数
+    double[] reduceRateForEachLevel;
+    // 每层的有效简化贡献率 = 每一层的成功简化次数/所有简化次数
+    double[] reduceRateContribOfEachLevel;
+    // 总共的有效简化率 = 有效简化次数/所有简化次数
+    double validReduceRate = 0.0;
+
     // 每一层简化后的样本字符数
     int[] lengthOfCase;
     // 每一层的简化率
     double[] simplificationRate;
     // 每一层贡献的简化率
     double[] addedSimplificationRate;
+
+    
     public int getVaildReduceCount() {
         return vaildReduceCount;
     }
@@ -76,10 +89,18 @@ public class Reducer {
         lengthOfCase = new int[5];
         simplificationRate = new double[5];
         addedSimplificationRate = new double[5];
+        validReduceCountForEachLevel = new int[5];
+        reduceCountForEachLevel = new int[5];
+        reduceRateForEachLevel = new double[5];
+        reduceRateContribOfEachLevel = new double[5];
         for(int i=0; i<=4; i++){
             lengthOfCase[i] = 0;
             simplificationRate[i] = 0.0;
             addedSimplificationRate[i] = 0.0;
+            validReduceCountForEachLevel[i] = 0;
+            reduceCountForEachLevel[i] = 0;
+            reduceRateForEachLevel[i] = 0.0;
+            reduceRateContribOfEachLevel[i] = 0.0;
         }
         List<StatementType> candidatesForDelStmt = new ArrayList<>();
         List<SimplifyType> candidatesForSimplifyStmt = new ArrayList<>();
@@ -205,7 +226,9 @@ public class Reducer {
             oracleChecker = new DTOracleChecker();
         }
         // 计算原样例的字符数
-        lengthOfCase[0] = testCase.toString().length();
+        lengthOfCase[0] += testCase.toString().length();
+        log.info("-------------------------------First Level-------------------------------");
+
         //选择一个语句类型
         for (int i = 0; i < maxReduceCount; i++) {
             // 首先克隆一份testcase
@@ -214,53 +237,54 @@ public class Reducer {
             if (delStmt == null) {
                 break;
             }
-            allReduceCount++;
             if (oracleChecker.hasBug(clonedTestCase.toString())) {
                 log.info("Statement [{}] del success", delStmt.toString());
+                stmtDelOrderSelector.updateWeight(delStmt.getType(), true);
                 // 删除后仍能复现bug则更新测试用例
                 testCase = clonedTestCase;
-                vaildReduceCount++;
-                stmtDelOrderSelector.updateWeight(delStmt.getType(), true);
+                reduceCountForEachLevel[1]++;
+                validReduceCountForEachLevel[1]++;
             } else {
                 log.info("Statement [{}] del failed", delStmt.toString());
                 stmtTypeFailMap.get(delStmt.getType()).add(delStmt);
                 stmtDelOrderSelector.updateWeight(delStmt.getType(), false);
+                reduceCountForEachLevel[1]++;
             }
         }
         // 计算第一层之后的简化样例字符数
-        lengthOfCase[1] = testCase.toString().length();
-       
+        lengthOfCase[1] += testCase.toString().length();
+       log.info("-------------------------------Second Level-------------------------------");
        // 第二层：*语句简化层*
       for(int i=1 ;i<=maxReduceCount;i++){
-        SimplifyType typeForStmtSimpliafy = stmtSimplifySelector.selectNext();
-       // SimplifyType typeForStmtSimpliafy = SimplifyType.DEL_SELECT_ROL;
-        switch (typeForStmtSimpliafy.toString()) {
+        SimplifyType typeForStmtSimplify = stmtSimplifySelector.selectNext();
+      //  SimplifyType typeForStmtSimplify = SimplifyType.SIMPLIFY_TABLE;
+        switch (typeForStmtSimplify.toString()) {
             case "SIMPLIFY_TABLE":
                 // 简化表定义
-                testCase = simplifyTable(testCase, oracleChecker);
+                testCase = simplifyTable(testCase, oracleChecker, typeForStmtSimplify);
                 break;
             case "DEL_INSERT_COL":
                 // 删除插入列
-                testCase = delInsertCol(testCase, oracleChecker);
+                testCase = delInsertCol(testCase, oracleChecker, typeForStmtSimplify);
                 break;
             case "DEL_UPDATE_COL":
                 // 删除更新列
-                testCase = delUpdateCol(testCase, oracleChecker);
+                testCase = delUpdateCol(testCase, oracleChecker, typeForStmtSimplify);
                 break;
             case "DEL_SELECT_ROL":
                 // 删除选择列
-                testCase = delSelectCol(testCase, oracleChecker);
+                testCase = delSelectCol(testCase, oracleChecker, typeForStmtSimplify);
                 break;
             case "DEL_EXPRE":
                 // 删除表达式
-                testCase = delWhereClause(testCase,oracleChecker);
+                testCase = delWhereClause(testCase,oracleChecker, typeForStmtSimplify);
                 break;
         }
          }    
         
         // 计算第二层之后的简化样例字符数
-        lengthOfCase[2] = testCase.toString().length();
-
+        lengthOfCase[2] += testCase.toString().length();
+        log.info("-------------------------------Third Level-------------------------------");
         // 第三层：*表达式简化层*
        for(int i=1;i<=maxReduceCount;i++)
            testCase = simplifyWhereExpr(testCase,oracleChecker);
@@ -268,51 +292,100 @@ public class Reducer {
    //     System.out.println(testCase.toString());
 
         // 计算第三层之后的简化样例字符数
-        lengthOfCase[3] = testCase.toString().length();
+        lengthOfCase[3] += testCase.toString().length();
+        log.info("-------------------------------Fourth Level-------------------------------");
         // 第四层：*常量简化层*
         for(int i=1;i<=maxReduceCount;i++)
          testCase = simplifyConstant(testCase,oracleChecker);
          
         // 计算第四层之后的简化样例字符数
-        lengthOfCase[4] = testCase.toString().length();
-        // 计算简化率
-        calculateSimplificationRate();
-        printSimplificationRate();
+        lengthOfCase[4] += testCase.toString().length();
+
+        // 获取简化统计数据
+        getStatistics();
 
         String res = testCase.toString();
         
         System.out.println(res);
         return res;
     }
-    private void printSimplificationRate(){
-        for(int i=1; i<=4;i++){
-            log.info("Simplification Rate  of {}th round: {}, Added Rate: {}",String.valueOf(i),String.valueOf(simplificationRate[i]),String.valueOf(addedSimplificationRate[i]));
-        }
+    public void getStatistics(){
+        // 计算简化程度
+        calculateSimplificationRate();
+        // 打印简化程度
+        printSimplificationRate();
+        // 计算有效简化率
+        calculateReduceCountRate();
+        // 打印有效简化率
+        printReduceCountRate();
     }
-    private void calculateSimplificationRate(){
+    public void  calculateReduceCountRate(){
+        for(int i=1;i<=4;i++){
+            allReduceCount += reduceCountForEachLevel[i];
+            vaildReduceCount += validReduceCountForEachLevel[i];
+            reduceRateForEachLevel[i] = (double)validReduceCountForEachLevel[i]/reduceCountForEachLevel[i];
+        }
+        for(int i=1;i<=4;i++){
+            reduceRateContribOfEachLevel[i] = (double)validReduceCountForEachLevel[i]/allReduceCount;
+        }
+
+        validReduceRate = (double)vaildReduceCount/allReduceCount;
+    }
+    public void printReduceCountRate(){
+        log.info("---------------------------Reduce Rate Statistics Start---------------------------");
+        //总共的有效简化率
+        for(int i=1; i<=4;i++){
+            // 每层的有效简化贡献率 ；每层的有效简化率
+            log.info("{}th Level: Valid Reduce Rate Contrib. {}, Valid Reduce Rate {}",String.valueOf(i),String.valueOf(reduceRateContribOfEachLevel[i]),String.valueOf(reduceRateForEachLevel[i]));
+        }
+        log.info("Total Valid Reduce Rate {}",String.valueOf(validReduceRate));
+        log.info("---------------------------Reudce Rate Statistics End  ---------------------------");
+    }
+
+    public void printSimplificationRate(){
+        log.info("---------------------------Simplification Rate Statistics Start---------------------------");
+        for(int i=1; i<=4;i++){
+            log.info("{}th Level: Simplification Rate {}, Added Rate: {}",String.valueOf(i),String.valueOf(simplificationRate[i]),String.valueOf(addedSimplificationRate[i]));
+        }
+        log.info("---------------------------Simplification Rate Statistics End  ---------------------------");
+    }
+    public void calculateSimplificationRate(){
         for(int i=1; i<=4;i++){
             simplificationRate[i] = (double)(lengthOfCase[0] - lengthOfCase[i])/lengthOfCase[0];
             addedSimplificationRate[i] = (double)(lengthOfCase[i-1]-lengthOfCase[i])/lengthOfCase[0];
         }
     }
-    private TestCase simplifyTable(TestCase testCase, OracleChecker oracleChecker){
+
+    private TestCase simplifyTable(TestCase testCase, OracleChecker oracleChecker, SimplifyType type){
         TestCase clonedTestCase = testCaseClone(testCase);
         String createSQL = clonedTestCase.createStmt.getStatement();
         // 找到")"位置然后将后面的表定义替换掉
         int rightBracketIdx = createSQL.lastIndexOf(")");
-        clonedTestCase.createStmt.setStmt(createSQL.substring(0, rightBracketIdx)+");");
+        String replacedStmt = createSQL.substring(0, rightBracketIdx)+")";
+        if(replacedStmt.equals(createSQL)){
+            log.info("createSQL[{}] can't be simpilified",clonedTestCase.createStmt.getStatement());
+            stmtSimplifySelector.updateWeight(type,false);
+            reduceCountForEachLevel[2]++;
+            return testCase;
+        }
+        clonedTestCase.createStmt.setStmt(replacedStmt);
      //   System.out.println(clonedTestCase.createStmt.getStatement());
 
         if (oracleChecker.hasBug(clonedTestCase.toString())) {
-            log.info("createSQL simpilify success");
+            log.info("createSQL[{}] simpilify success",clonedTestCase.createStmt.getStatement());
             // 删除后仍能复现bug则更新测试用例
             testCase = testCaseClone(clonedTestCase); 
+            stmtSimplifySelector.updateWeight(type,true);
+            validReduceCountForEachLevel[2]++;
+            reduceCountForEachLevel[2]++;
         } else {
-            log.info("createSQL simpilify failed");
+            log.info("createSQL[{}] simpilify failed",clonedTestCase.createStmt);
+            stmtSimplifySelector.updateWeight(type,false);
+            reduceCountForEachLevel[2]++;
         }
         return testCase;
     }
-    private TestCase delSelectCol(TestCase testCase, OracleChecker oracleChecker){
+    private TestCase delSelectCol(TestCase testCase, OracleChecker oracleChecker, SimplifyType type){
         TestCase clonedTestCase = testCaseClone(testCase);
         ArrayList <StatementCell> stmtListForSelect = new ArrayList<>();
         for(StatementCell stmt : clonedTestCase.tx1.getStatements()){
@@ -329,6 +402,8 @@ public class Reducer {
         }
         if(stmtListForSelect.size() == 0){
             log.info("There is no selectSQL");
+            stmtSimplifySelector.updateWeight(type, false);
+            reduceCountForEachLevel[2]++;
             return testCase;
         }
         int simpilifyIdx = (int) (Math.random() * stmtListForSelect.size());
@@ -349,6 +424,8 @@ public class Reducer {
         String[] selectWords = selectStr.split(",");
         if(selectWords.length == 1){
             log.info("selectSQL [{}] can't be simplified",selectCell.toString()+":"+selectCell.getStatement().toString());
+            stmtSimplifySelector.updateWeight(type, false);
+            reduceCountForEachLevel[2]++;
             return testCase;
         }
         int colLength = selectWords.length;
@@ -388,12 +465,18 @@ public class Reducer {
             selectCell.setWherePrefix(replacedSelectStrPrefx.substring(0,replacedSelectStrPrefx.toString().indexOf("#")-1));
             if (oracleChecker.hasBug(clonedTestCase.toString())) {
                 log.info("selectSQL [{}] simpilify success",selectCell.toString()+":"+selectCell.getStatement().toString());
+                stmtSimplifySelector.updateWeight(type, true);
+                validReduceCountForEachLevel[2]++;
+                reduceCountForEachLevel[2]++;
+                
                 // 删除后仍能复现bug则更新测试用例
                 testCase = testCaseClone(clonedTestCase); 
                 idx--;
                 selectCell = stmtListForSelect.get(simpilifyIdx);
             } else {
                 log.info("selectSQL [{}] simpilify failed",selectCell.toString()+":"+selectCell.getStatement().toString());
+                stmtSimplifySelector.updateWeight(type, false);
+                reduceCountForEachLevel[2]++;
                 selectCell = selectCellCopy;
             }
             selectCellCopy = selectCell.copy();
@@ -415,8 +498,8 @@ public class Reducer {
     private TestCase simplifyConstant(TestCase testCase, OracleChecker oracleChecker){
         TestCase clonedTestCase = testCaseClone(testCase);
         // 选取需要简化的类型
-        StatementType type = constantSimplifySelector.selectNext();
-     //   StatementType type = StatementType.UPDATE;
+    //   StatementType type = constantSimplifySelector.selectNext();
+        StatementType type = StatementType.UPDATE;
         ArrayList <StatementCell> stmtListForType = new ArrayList<>();
         for(StatementCell stmt : clonedTestCase.prepareTableStmts){
             if(stmt.getType().toString().equals(type.toString())){
@@ -435,11 +518,13 @@ public class Reducer {
         }
         if(stmtListForType.size() == 0){
             log.info("There is no {} SQL",type.toString());
+            constantSimplifySelector.updateWeight(type, false);
+            reduceCountForEachLevel[4]++;
             return testCase;
         }
-        int simpilifyIdx = (int) (Math.random() * stmtListForType.size());
+       int simpilifyIdx = (int) (Math.random() * stmtListForType.size());
         
-        //int simpilifyIdx = 0;
+     //   int simpilifyIdx = 0;
         StatementCell constantCell = stmtListForType.get(simpilifyIdx);
         switch (constantCell.getType().toString()) {
             case "INSERT":
@@ -482,6 +567,19 @@ public class Reducer {
         for(int idx=0; idx<colLength; idx++){
             Integer num = Randomly.getNextInt(-10, 10);
             String numStr = num.toString();
+            int tmp = -1314;
+            if(idx == 0){
+                tmp = Integer.parseInt(valueWords[idx].substring(0));
+            }
+            else{
+                tmp = Integer.parseInt(valueWords[idx].substring(1));
+            }
+            if(tmp>=-10 && tmp<=10){
+                log.info("Constant of wherePrefixSQL [{}] simpilify failed",constantCell.toString()+":"+constantCell.getStatement().toString());
+                constantSimplifySelector.updateWeight(type, false);
+                reduceCountForEachLevel[4]++;
+                continue;
+            }
             if(idx == 0 )
                 valueWords[idx] = numStr;
             else
@@ -502,11 +600,16 @@ public class Reducer {
            
             if (oracleChecker.hasBug(clonedTestCase.toString())) {
                 log.info("Constant of wherePrefixSQL [{}] simpilify success",constantCell.toString()+":"+constantCell.getStatement().toString());
+                constantSimplifySelector.updateWeight(type, true);
+                validReduceCountForEachLevel[4]++;
+                reduceCountForEachLevel[4]++;
                 // 删除后仍能复现bug则更新测试用例
                 testCase = testCaseClone(clonedTestCase); 
                 
             } else {
                 log.info("Constant of wherePrefixSQL [{}] simpilify failed",constantCell.toString()+":"+constantCell.getStatement().toString());
+                constantSimplifySelector.updateWeight(type, false);
+                reduceCountForEachLevel[4]++;
                 constantCell = constantCellCopy;
             }
             constantCellCopy = constantCell.copy();
@@ -527,6 +630,8 @@ public class Reducer {
         MySQLExpression rootPredicate = constantCell.getPredicate();
         if(rootPredicate == null){
             log.info("Constant of whereClauseSQL [{}] can't be simpilified ",constantCell.toString()+":"+constantCell.getStatement().toString()); 
+            constantSimplifySelector.updateWeight(type, false);
+            reduceCountForEachLevel[4]++;
             return testCase; 
         }
         LinkedList <MySQLExpression> nodeQueue = new LinkedList<>();
@@ -538,19 +643,29 @@ public class Reducer {
             if(judgeConstantNode(node.getClass().getSimpleName())){
                 long num = Randomly.getNextInt(-10, 10);
                 MySQLIntConstant nodeInt = (MySQLIntConstant) node;
+                long tmp = nodeInt.getInt();
+                if(tmp>=-10 && tmp<=10){
+                    log.info("Constant of whereClauseSQL [{}] simpilify failed ",constantCell.toString()+":"+constantCell.getStatement().toString());
+                    constantSimplifySelector.updateWeight(type, false);
+                    reduceCountForEachLevel[4]++;
+                    continue;
+                }
                 nodeInt.setIntConstant(num, String.valueOf(num));
                 constantCell.setWhereClause(MySQLVisitor.asString(rootPredicate));
                 constantCell.setStmt(constantCell.getWherePrefix()+" WHERE "+constantCell.getWhereClause()+" "+constantCell.getForPostFix());
                 if (oracleChecker.hasBug(clonedTestCase.toString())) {
                     log.info("Constant of whereClauseSQL [{}] simpilify success ",constantCell.toString()+":"+constantCell.getStatement().toString());
+                    constantSimplifySelector.updateWeight(type, true);
+                    validReduceCountForEachLevel[4]++;
+                    reduceCountForEachLevel[4]++;
                     // 删除后仍能复现bug则更新测试用例
                     testCase = testCaseClone(clonedTestCase); 
-                    constantSimplifySelector.updateWeight(type, true);
+                    
                 } else {
                     log.info("Constant of whereClauseSQL [{}] simpilify failed ",constantCell.toString()+":"+constantCell.getStatement().toString());
+                    constantSimplifySelector.updateWeight(type, false);
+                    reduceCountForEachLevel[4]++;
                     if(nodeQueue.isEmpty()){
-                        // 后续要修改
-                        constantSimplifySelector.updateWeight(type, false);
                         break;
                     }
                 } 
@@ -617,7 +732,7 @@ public class Reducer {
         StatementCell constantCellCopy = constantCell.copy();
         if(constantCellCopy.getWhereClause()=="")
             constantCellCopy.setStmt(constantCellCopy.getStatement()+" WHERE");
-        // 获得一条insert语句
+        // 获得一条update语句
         String updatetStmt = constantCellCopy.getStatement();
         String replacedUpdatestmt = updatetStmt.replace("SET", "@");
         String finalReplacedUpdatestmt = replacedUpdatestmt.replace("WHERE", "@");
@@ -633,7 +748,16 @@ public class Reducer {
         for(int idx=0; idx<colLength; idx++){
             Integer num = Randomly.getNextInt(-10, 10);
             String numStr = num.toString();
+
             int equalIdx = updateColWords[idx].indexOf("=");
+            int tmp = -1314;
+            tmp = Integer.parseInt(updateColWords[idx].substring(equalIdx+1));
+            if(tmp>=-10 && tmp<=10){
+                log.info("Constant of wherePrefixAndWhereClauseSQL [{}] simpilify failed",constantCell.toString()+":"+constantCell.getStatement().toString());
+                constantSimplifySelector.updateWeight(type, false);
+                reduceCountForEachLevel[4]++;
+                continue;
+            } 
             updateColWords[idx] = updateColWords[idx].substring(0, equalIdx+1)+numStr;
             StringBuffer newUpdateColStr = new StringBuffer();
             for(int i=0; i<colLength; i++){
@@ -663,11 +787,16 @@ public class Reducer {
             constantCell.setWherePrefix(newUpdateColWherePrefix.substring(0, newUpdateColWherePrefix.toString().lastIndexOf("@")-1));
             if (oracleChecker.hasBug(clonedTestCase.toString())) {
                 log.info("Constant of wherePrefixAndWhereClauseSQL [{}] simpilify success",constantCell.toString()+":"+constantCell.getStatement().toString());
+                constantSimplifySelector.updateWeight(type, true);
+                validReduceCountForEachLevel[4]++;
+                reduceCountForEachLevel[4]++;
                 // 删除后仍能复现bug则更新测试用例
                 testCase = testCaseClone(clonedTestCase); 
                 
             } else {
                 log.info("Constant of wherePrefixAndWhereClauseSQL [{}] simpilify failed",constantCell.toString()+":"+constantCell.getStatement().toString());
+                constantSimplifySelector.updateWeight(type, false);
+                reduceCountForEachLevel[4]++;
                 constantCell = constantCellCopy;
             }
             constantCellCopy = constantCell.copy();
@@ -696,6 +825,9 @@ public class Reducer {
     }
     private TestCase simplifyWhereExpr(TestCase testCase, OracleChecker oracleChecker){
         TestCase clonedTestCase = testCaseClone(testCase);
+        // 获取简化类型
+        WhereExprType exprType = exprSimplifySelector.selectNext();
+        //WhereExprType exprType = WhereExprType.MySQLBinaryLogicalOperation;
         ArrayList<StatementCell> whereStmtList = new ArrayList<>();
         for (StatementCell whereStmt : clonedTestCase.tx1.getStatements()){
             if(whereStmt.getWhereClause() != "")
@@ -707,7 +839,8 @@ public class Reducer {
         }
         if(whereStmtList.size() == 0){
             log.info("There is no whereSQL");
-            // 删除后仍能复现bug则更新测试用例
+            exprSimplifySelector.updateWeight(exprType, false);
+            reduceCountForEachLevel[3]++;
             return testCase;
         }
         int simpilifyIdx = (int) (Math.random() * whereStmtList.size());
@@ -720,8 +853,7 @@ public class Reducer {
        // Queue <MySQLExpression> nodeQueue = new LinkedList<>();
         LinkedList<Pair<MySQLExpression,MySQLExpression>> nodeQueue = new LinkedList<>();
         nodeQueue.add(rootNode);
-        WhereExprType exprType = exprSimplifySelector.selectNext();
-        //WhereExprType exprType = WhereExprType.MySQLBinaryLogicalOperation;
+
         while (!nodeQueue.isEmpty()) {
             //  MySQLExpression nodePredicate = nodeQueue.getFirst();
             Pair<MySQLExpression, MySQLExpression> node = nodeQueue.getFirst();
@@ -819,13 +951,16 @@ public class Reducer {
                 whereCell.setStmt(whereCell.getWherePrefix()+" WHERE "+whereCell.getWhereClause()+" "+whereCell.getForPostFix());
                 if (oracleChecker.hasBug(clonedTestCase.toString())) {
                     log.info("[{}] whereSQL Expr [{}] simpilify success",exprType,whereCell.toString()+":"+whereCell.getStatement().toString());
+                    exprSimplifySelector.updateWeight(exprType, true);
                     // 删除后仍能复现bug则更新测试用例
                     testCase = testCaseClone(clonedTestCase); 
-                    exprSimplifySelector.updateWeight(exprType, true);
+                    validReduceCountForEachLevel[3]++;
+                    reduceCountForEachLevel[3]++;
                     break;
                 } else {
                     log.info("[{}] whereSQL Expr[{}] simpilify failed",exprType,whereCell.toString()+":"+whereCell.getStatement().toString());
                     exprSimplifySelector.updateWeight(exprType, false);
+                    reduceCountForEachLevel[3]++;
                     break;
                     // if(nodeQueue.isEmpty()){
                     //     exprSimplifySelector.updateWeight(exprType, false);
@@ -924,8 +1059,9 @@ public class Reducer {
 
                 if(isAllLeafNodes == true){
                     if(nodeQueue.isEmpty()){
-                        exprSimplifySelector.updateWeight(exprType, false);
                         log.info("[{}] whereSQL Expr[{}] can't be simpilified",exprType,whereCell.toString()+":"+whereCell.getStatement().toString());
+                        exprSimplifySelector.updateWeight(exprType, false);
+                        reduceCountForEachLevel[3]++;
                         break;
                     }
                 }
@@ -952,7 +1088,7 @@ public class Reducer {
         }
         return false;
     }
-    private TestCase delWhereClause(TestCase testCase, OracleChecker oracleChecker){
+    private TestCase delWhereClause(TestCase testCase, OracleChecker oracleChecker, SimplifyType type){
         TestCase clonedTestCase = testCaseClone(testCase);
         ArrayList<StatementCell> whereStmtList = new ArrayList<>();
         for (StatementCell whereStmt : clonedTestCase.tx1.getStatements()){
@@ -965,6 +1101,8 @@ public class Reducer {
         }
         if(whereStmtList.size() == 0){
             log.info("There is no whereSQL");
+            stmtSimplifySelector.updateWeight(type, false);
+            reduceCountForEachLevel[2]++;
             return testCase;
         }
         int simpilifyIdx = (int) (Math.random() * whereStmtList.size());
@@ -983,13 +1121,18 @@ public class Reducer {
             log.info("whereSQL [{}] simpilify success",whereCell.toString()+":"+whereCell.getStatement().toString());
             // 删除后仍能复现bug则更新测试用例
             testCase = testCaseClone(clonedTestCase); 
+            stmtSimplifySelector.updateWeight(type, true);
+            validReduceCountForEachLevel[2]++;
+            reduceCountForEachLevel[2]++;
         } else {
             log.info("whereSQL [{}] simpilify failed",whereCell.toString()+":"+whereCell.getStatement().toString());
+            stmtSimplifySelector.updateWeight(type, false);
+            reduceCountForEachLevel[2]++;
         }      
         return testCase;
     }
     
-    private TestCase delInsertCol(TestCase testCase, OracleChecker oracleChecker){
+    private TestCase delInsertCol(TestCase testCase, OracleChecker oracleChecker, SimplifyType type){
         TestCase clonedTestCase = testCaseClone(testCase);
         ArrayList<StatementCell> insertStmtList = new ArrayList<>();
         for (StatementCell insertStmt : clonedTestCase.prepareTableStmts){
@@ -1006,7 +1149,8 @@ public class Reducer {
         }
         if(insertStmtList.size() == 0){
             log.info("There is no insertSQL");
-            // 删除后仍能复现bug则更新测试用例
+            stmtSimplifySelector.updateWeight(type, false);
+            reduceCountForEachLevel[2]++;
             return testCase;
         }
         int simplifyIdx = (int) (Math.random() * insertStmtList.size());
@@ -1028,6 +1172,8 @@ public class Reducer {
         // 如果只有一列就不删了
         if(columnWords.length == 1){
             log.info("insertSQL [{}] can't be simplified",insertCell.toString()+":"+insertCell.getStatement().toString());
+            stmtSimplifySelector.updateWeight(type, false);
+            reduceCountForEachLevel[2]++;
             return testCase;
         } 
         // 剩下的都是至少两列插入，随机选择一列删除
@@ -1108,12 +1254,17 @@ public class Reducer {
             
             if (oracleChecker.hasBug(clonedTestCase.toString())) {
                 log.info("insertSQL [{}] simpilify success",insertCell.toString()+":"+insertCell.getStatement().toString());
+                stmtSimplifySelector.updateWeight(type, true);
+                validReduceCountForEachLevel[2]++;
+                reduceCountForEachLevel[2]++;
                 // 删除后仍能复现bug则更新测试用例
                 testCase = testCaseClone(clonedTestCase); 
                 idx--;
                 insertCell = insertStmtList.get(simplifyIdx);
             } else {
                 log.info("insertSQL [{}] simpilify failed",insertCell.toString()+":"+insertCell.getStatement().toString());
+                stmtSimplifySelector.updateWeight(type, false);
+                reduceCountForEachLevel[2]++;
                 insertCell = insertCellCopy;
             }
             // 继续下一轮 把insertCell更新为最新的
@@ -1138,7 +1289,7 @@ public class Reducer {
         return testCase;
     }
 
-    private TestCase delUpdateCol(TestCase testCase, OracleChecker oracleChecker){
+    private TestCase delUpdateCol(TestCase testCase, OracleChecker oracleChecker, SimplifyType type){
         TestCase clonedTestCase = testCaseClone(testCase);
         ArrayList<StatementCell> updateStmtList = new ArrayList<>();
         for (StatementCell updateStmt : clonedTestCase.tx1.getStatements()){
@@ -1151,6 +1302,8 @@ public class Reducer {
         }
         if(updateStmtList.size() == 0){
             log.info("There is no updateSQL");
+            stmtSimplifySelector.updateWeight(type, false);
+            reduceCountForEachLevel[2]++;
             return testCase;
         }
         int simplifyIdx = (int) (Math.random() * updateStmtList.size());
@@ -1175,6 +1328,8 @@ public class Reducer {
         // 如果只有一个则不进行简化
         if(updateWords.length == 1){
             log.info("updateSQL [{}] can't be simplified",upCell.toString()+":"+upCell.getStatement().toString());
+            stmtSimplifySelector.updateWeight(type, false);
+            reduceCountForEachLevel[2]++;
             return testCase;
         } 
         int colLength = updateWords.length;
@@ -1213,12 +1368,18 @@ public class Reducer {
             upCell.setWherePrefix(replacedUpdateStrPrefix.substring(0, replacedUpdateStrPrefix.toString().lastIndexOf("@")-1));
             if (oracleChecker.hasBug(clonedTestCase.toString())) {
                 log.info("updateSQL [{}] simpilify success",upCell.toString()+":"+upCell.getStatement().toString());
+                stmtSimplifySelector.updateWeight(type, true);
+                validReduceCountForEachLevel[2]++;
+                reduceCountForEachLevel[2]++;
+
                 // 删除后仍能复现bug则更新测试用例
                 testCase = testCaseClone(clonedTestCase); 
                 idx--;
                 upCell = updateStmtList.get(simplifyIdx);
             } else {
                 log.info("updateSQL [{}] simpilify failed",upCell.toString()+":"+upCell.getStatement().toString());
+                stmtSimplifySelector.updateWeight(type, false);
+                reduceCountForEachLevel[2]++;
                 upCell = UpCellCopy;
             }
 
