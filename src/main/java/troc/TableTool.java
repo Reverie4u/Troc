@@ -1,5 +1,6 @@
 package troc;
 
+import java.io.File;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -87,6 +88,10 @@ public class TableTool {
     static public Reducer probabilityTableReducer;
     static public Reducer epsilonGreedyReducer;
     static public int maxReduceCount = 5;
+    public static String bugPathName = "bugs";
+    public static String bugPath = "";
+    public static String outputDir = "";
+    public static int bugFound = 0;
 
     public static ArrayList<String> getColNames() {
         return colNames;
@@ -97,6 +102,7 @@ public class TableTool {
     }
 
     static void initialize(Options options) {
+        outputDir = options.getOutputDir();
         refMap = new HashMap<>();
         refMap.put("MYSQL", "MARIADB");
         refMap.put("MARIADB", "TIDB");
@@ -129,6 +135,13 @@ public class TableTool {
             possibleIsolationLevels.add(IsolationLevel.READ_UNCOMMITTED);
             possibleIsolationLevels.add(IsolationLevel.SERIALIZABLE);
         }
+        File parentFile = new File(outputDir);
+        if (parentFile.exists()) {
+            bugPath = outputDir + File.separator + bugPathName;
+            File file = new File(bugPath);
+            file.mkdirs();
+        }
+        log.info("bugPath: {}", bugPath);
     }
 
     /**
@@ -465,7 +478,7 @@ public class TableTool {
             rs.close();
         } catch (SQLException e) {
             log.info("Execute query failed: {}", query);
-            throw new RuntimeException("Execution failed: ", e);
+            e.printStackTrace();
         }
     }
 

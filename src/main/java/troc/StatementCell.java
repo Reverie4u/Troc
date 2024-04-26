@@ -49,36 +49,47 @@ public class StatementCell {
     public Transaction getTx() {
         return tx;
     }
-    public String getStmt(){
+
+    public String getStmt() {
         return statement;
     }
-    public String getWhereClause(){
+
+    public String getWhereClause() {
         return whereClause;
     }
-    public String getWherePrefix(){
+
+    public String getWherePrefix() {
         return wherePrefix;
     }
-    public String getForPostFix(){
+
+    public String getForPostFix() {
         return forPostfix;
     }
-    public int getStmtId(){
+
+    public int getStmtId() {
         return statementId;
     }
-    public MySQLExpression getPredicate(){
+
+    public MySQLExpression getPredicate() {
         return predicate;
     }
-    public void setWhereClause(String newWhereClause){
+
+    public void setWhereClause(String newWhereClause) {
         this.whereClause = newWhereClause;
     }
-    public void setPredicate(MySQLExpression newPredicate){
+
+    public void setPredicate(MySQLExpression newPredicate) {
         this.predicate = newPredicate;
     }
-    public void setStmt(String newStmt){
+
+    public void setStmt(String newStmt) {
         this.statement = newStmt;
     }
-    public void setWherePrefix(String newPrefix){
+
+    public void setWherePrefix(String newPrefix) {
         this.wherePrefix = newPrefix;
     }
+
     public StatementCell(Transaction tx, int statementId) {
         this.tx = tx;
         this.statementId = statementId;
@@ -317,7 +328,7 @@ public class StatementCell {
             recomputeStatement();
         } catch (SQLException e) {
             log.info("Execute query failed: {}", query);
-            throw new RuntimeException("Execution failed: ", e);
+            e.printStackTrace();
         }
     }
 
@@ -372,7 +383,7 @@ public class StatementCell {
         copy.values = values;
         copy.blocked = false;
         copy.result = null;
-        if(!copy.whereClause.equals("")){
+        if (!copy.whereClause.equals("")) {
             MySQLExpressionLexer lexer = new MySQLExpressionLexer(CharStreams.fromString(copy.whereClause));
             // create a buffer of tokens pulled from the lexer
             CommonTokenStream tokens = new CommonTokenStream(lexer);
@@ -382,9 +393,9 @@ public class StatementCell {
             copy.predicate = visitor.visit(tree);
         }
         // 共享引用
-        else{
+        else {
             copy.predicate = predicate;
-        }    
+        }
         copy.selectedColumns = selectedColumns;
         return copy;
     }

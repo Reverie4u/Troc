@@ -1,5 +1,8 @@
 package troc;
 
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -128,6 +131,13 @@ public class TrocChecker {
                     default:
                         break;
                 }
+                // 输出原始bug case
+                saveTestCase(testCase.toString(),
+                        TableTool.bugPath + File.separator + "bug_" + TableTool.bugFound + "_origin.txt");
+                // 输出简化后的bug case
+                saveTestCase(reducedCase,
+                        TableTool.bugPath + File.separator + "bug_" + TableTool.bugFound + "_reduced.txt");
+                TableTool.bugFound++;
             }
             if (TableTool.isFilterDuplicateBug && !res) {
                 // 同一个测试用例检测到的BUG都是一样的，一旦检测到直接停止本轮检测
@@ -145,6 +155,16 @@ public class TrocChecker {
                     TableTool.probabilityTableReducer.getVaildReduceCount(),
                     TableTool.epsilonGreedyReducer.getAllReduceCount(),
                     TableTool.epsilonGreedyReducer.getVaildReduceCount());
+        }
+    }
+
+    public static void saveTestCase(String testCase, String filename) {
+        try {
+            FileWriter writer = new FileWriter(filename);
+            writer.write(testCase);
+            writer.close();
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 

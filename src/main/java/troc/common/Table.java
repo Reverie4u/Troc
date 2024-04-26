@@ -97,6 +97,7 @@ public abstract class Table {
             TableTool.executeOnTable(initSQL);
         }
         String query = "SELECT COUNT(*) FROM " + tableName;
+        log.info("query: {}", query);
         initRowCount = TableTool.executeQueryReturnInteger(query);
         log.info("Rowcount: {}", initRowCount);
     }
@@ -226,8 +227,8 @@ public abstract class Table {
         StatementCell cell = new StatementCell(tx, 0, "BEGIN");
         statementList.add(cell);
         for (int i = 1; i <= n; i++) {
-            statementList.add(cell);
             cell = genStatement(tx, i);
+            statementList.add(cell);
         }
         String lastStmt = "COMMIT";
         if (Randomly.getBoolean()) {
