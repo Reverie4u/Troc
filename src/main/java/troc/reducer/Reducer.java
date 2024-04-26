@@ -227,72 +227,72 @@ public class Reducer {
         }
         // 计算原样例的字符数
         lengthOfCase[0] += testCase.toString().length();
-        log.info("-------------------------------First Level-------------------------------");
+//         log.info("-------------------------------First Level-------------------------------");
 
-        //选择一个语句类型
-        for (int i = 0; i < maxReduceCount; i++) {
-            // 首先克隆一份testcase
-            TestCase clonedTestCase = testCaseClone(testCase);
-            StatementCell delStmt = deleteStatement(clonedTestCase);
-            if (delStmt == null) {
-                break;
-            }
-            if (oracleChecker.hasBug(clonedTestCase.toString())) {
-                log.info("Statement [{}] del success", delStmt.toString());
-                stmtDelOrderSelector.updateWeight(delStmt.getType(), true);
-                // 删除后仍能复现bug则更新测试用例
-                testCase = clonedTestCase;
-                reduceCountForEachLevel[1]++;
-                validReduceCountForEachLevel[1]++;
-            } else {
-                log.info("Statement [{}] del failed", delStmt.toString());
-                stmtTypeFailMap.get(delStmt.getType()).add(delStmt);
-                stmtDelOrderSelector.updateWeight(delStmt.getType(), false);
-                reduceCountForEachLevel[1]++;
-            }
-        }
-        // 计算第一层之后的简化样例字符数
-        lengthOfCase[1] += testCase.toString().length();
-       log.info("-------------------------------Second Level-------------------------------");
-       // 第二层：*语句简化层*
-      for(int i=1 ;i<=maxReduceCount;i++){
-        SimplifyType typeForStmtSimplify = stmtSimplifySelector.selectNext();
-      //  SimplifyType typeForStmtSimplify = SimplifyType.SIMPLIFY_TABLE;
-        switch (typeForStmtSimplify.toString()) {
-            case "SIMPLIFY_TABLE":
-                // 简化表定义
-                testCase = simplifyTable(testCase, oracleChecker, typeForStmtSimplify);
-                break;
-            case "DEL_INSERT_COL":
-                // 删除插入列
-                testCase = delInsertCol(testCase, oracleChecker, typeForStmtSimplify);
-                break;
-            case "DEL_UPDATE_COL":
-                // 删除更新列
-                testCase = delUpdateCol(testCase, oracleChecker, typeForStmtSimplify);
-                break;
-            case "DEL_SELECT_ROL":
-                // 删除选择列
-                testCase = delSelectCol(testCase, oracleChecker, typeForStmtSimplify);
-                break;
-            case "DEL_EXPRE":
-                // 删除表达式
-                testCase = delWhereClause(testCase,oracleChecker, typeForStmtSimplify);
-                break;
-        }
-         }    
+//         //选择一个语句类型
+//         for (int i = 0; i < maxReduceCount; i++) {
+//             // 首先克隆一份testcase
+//             TestCase clonedTestCase = testCaseClone(testCase);
+//             StatementCell delStmt = deleteStatement(clonedTestCase);
+//             if (delStmt == null) {
+//                 break;
+//             }
+//             if (oracleChecker.hasBug(clonedTestCase.toString())) {
+//                 log.info("Statement [{}] del success", delStmt.toString());
+//                 stmtDelOrderSelector.updateWeight(delStmt.getType(), true);
+//                 // 删除后仍能复现bug则更新测试用例
+//                 testCase = clonedTestCase;
+//                 reduceCountForEachLevel[1]++;
+//                 validReduceCountForEachLevel[1]++;
+//             } else {
+//                 log.info("Statement [{}] del failed", delStmt.toString());
+//                 stmtTypeFailMap.get(delStmt.getType()).add(delStmt);
+//                 stmtDelOrderSelector.updateWeight(delStmt.getType(), false);
+//                 reduceCountForEachLevel[1]++;
+//             }
+//         }
+//         // 计算第一层之后的简化样例字符数
+//         lengthOfCase[1] += testCase.toString().length();
+//        log.info("-------------------------------Second Level-------------------------------");
+//        // 第二层：*语句简化层*
+//       for(int i=1 ;i<=maxReduceCount;i++){
+//         SimplifyType typeForStmtSimplify = stmtSimplifySelector.selectNext();
+//       //  SimplifyType typeForStmtSimplify = SimplifyType.SIMPLIFY_TABLE;
+//         switch (typeForStmtSimplify.toString()) {
+//             case "SIMPLIFY_TABLE":
+//                 // 简化表定义
+//                 testCase = simplifyTable(testCase, oracleChecker, typeForStmtSimplify);
+//                 break;
+//             case "DEL_INSERT_COL":
+//                 // 删除插入列
+//                 testCase = delInsertCol(testCase, oracleChecker, typeForStmtSimplify);
+//                 break;
+//             case "DEL_UPDATE_COL":
+//                 // 删除更新列
+//                 testCase = delUpdateCol(testCase, oracleChecker, typeForStmtSimplify);
+//                 break;
+//             case "DEL_SELECT_ROL":
+//                 // 删除选择列
+//                 testCase = delSelectCol(testCase, oracleChecker, typeForStmtSimplify);
+//                 break;
+//             case "DEL_EXPRE":
+//                 // 删除表达式
+//                 testCase = delWhereClause(testCase,oracleChecker, typeForStmtSimplify);
+//                 break;
+//         }
+//          }    
         
-        // 计算第二层之后的简化样例字符数
-        lengthOfCase[2] += testCase.toString().length();
-        log.info("-------------------------------Third Level-------------------------------");
-        // 第三层：*表达式简化层*
-       for(int i=1;i<=maxReduceCount;i++)
-           testCase = simplifyWhereExpr(testCase,oracleChecker);
+//         // 计算第二层之后的简化样例字符数
+//         lengthOfCase[2] += testCase.toString().length();
+//         log.info("-------------------------------Third Level-------------------------------");
+//         // 第三层：*表达式简化层*
+//        for(int i=1;i<=maxReduceCount;i++)
+//            testCase = simplifyWhereExpr(testCase,oracleChecker);
         
-   //     System.out.println(testCase.toString());
+//    //     System.out.println(testCase.toString());
 
-        // 计算第三层之后的简化样例字符数
-        lengthOfCase[3] += testCase.toString().length();
+//         // 计算第三层之后的简化样例字符数
+//         lengthOfCase[3] += testCase.toString().length();
         log.info("-------------------------------Fourth Level-------------------------------");
         // 第四层：*常量简化层*
         for(int i=1;i<=maxReduceCount;i++)
@@ -498,8 +498,8 @@ public class Reducer {
     private TestCase simplifyConstant(TestCase testCase, OracleChecker oracleChecker){
         TestCase clonedTestCase = testCaseClone(testCase);
         // 选取需要简化的类型
-    //   StatementType type = constantSimplifySelector.selectNext();
-        StatementType type = StatementType.UPDATE;
+       StatementType type = constantSimplifySelector.selectNext();
+    //    StatementType type = StatementType.UPDATE;
         ArrayList <StatementCell> stmtListForType = new ArrayList<>();
         for(StatementCell stmt : clonedTestCase.prepareTableStmts){
             if(stmt.getType().toString().equals(type.toString())){
@@ -522,9 +522,9 @@ public class Reducer {
             reduceCountForEachLevel[4]++;
             return testCase;
         }
-       int simpilifyIdx = (int) (Math.random() * stmtListForType.size());
-        
-     //   int simpilifyIdx = 0;
+       int simpilifyIdx = (int) (Math.random() * stmtListForType.size()); 
+      //  int simpilifyIdx = 0;
+
         StatementCell constantCell = stmtListForType.get(simpilifyIdx);
         switch (constantCell.getType().toString()) {
             case "INSERT":
@@ -727,7 +727,15 @@ public class Reducer {
         }
         return testCase;
     }
-    
+    private int deleteSpaceOfStrValue(String str){
+        int spaceIdx = str.indexOf(" ");
+        StringBuffer newStr = new StringBuffer("");
+        if(spaceIdx > 0)
+            newStr.append(str.substring(0, spaceIdx));
+        else
+            newStr.append(str);
+        return Integer.parseInt(newStr.toString());
+    }
     private TestCase simplifyConstantOfWherePrefixAnbWhereClause(StatementCell constantCell, TestCase clonedTestCase, TestCase testCase, OracleChecker oracleChecker, StatementType type){
         StatementCell constantCellCopy = constantCell.copy();
         if(constantCellCopy.getWhereClause()=="")
@@ -750,8 +758,7 @@ public class Reducer {
             String numStr = num.toString();
 
             int equalIdx = updateColWords[idx].indexOf("=");
-            int tmp = -1314;
-            tmp = Integer.parseInt(updateColWords[idx].substring(equalIdx+1));
+            int tmp = deleteSpaceOfStrValue(updateColWords[idx].substring(equalIdx+1));
             if(tmp>=-10 && tmp<=10){
                 log.info("Constant of wherePrefixAndWhereClauseSQL [{}] simpilify failed",constantCell.toString()+":"+constantCell.getStatement().toString());
                 constantSimplifySelector.updateWeight(type, false);
@@ -802,7 +809,7 @@ public class Reducer {
             constantCellCopy = constantCell.copy();
             if(constantCellCopy.getWhereClause()=="")
                 constantCellCopy.setStmt(constantCellCopy.getStatement()+" WHERE");
-            // 获得一条insert语句
+            // 获得一条update语句
             updatetStmt = constantCellCopy.getStatement();
             replacedUpdatestmt = updatetStmt.replace("SET", "@");
             finalReplacedUpdatestmt = replacedUpdatestmt.replace("WHERE", "@");
@@ -815,7 +822,6 @@ public class Reducer {
             updateColWords = updateColStr.split(",");
             colLength = updateColWords.length;
         }
-        // 到时候修改
         if(constantCell.getPredicate() == null){
             constantSimplifySelector.updateWeight(type, false);
             return testCase;
