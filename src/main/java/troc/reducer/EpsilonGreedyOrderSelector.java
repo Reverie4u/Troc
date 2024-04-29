@@ -9,7 +9,7 @@ import troc.Randomly;
 
 public class EpsilonGreedyOrderSelector<T> implements OrderSelector<T> {
     Map<T, Double> candidatesGainMap;
-    double epsilon = 0.1;
+    double epsilon = 0.7;
     int iteration = 0;
 
     @Override

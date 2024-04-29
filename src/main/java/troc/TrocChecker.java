@@ -105,38 +105,54 @@ public class TrocChecker {
             if (!res && TableTool.reducerSwitchOn) {
                 log.info("---------------------------Find a bug, start reducer ---------------------------");
                 String reducedCase = "";
+                String reducedCaseOfAllRandom = "";
+                String reducedCaseOfAllProb = "";
+                String reducedCaseOfAllEpsilon = "";
                 switch (TableTool.reducerType) {
                     case "random":
                         reducedCase = TableTool.randomReducer.reduce(testCase.toString());
                         log.info("Random reducer result: \n{}", reducedCase);
-                        TableTool.randomReducer.getStatistics();
                         break;
                     case "probability-table":
                         reducedCase = TableTool.probabilityTableReducer.reduce(testCase.toString());
-                        log.info("Probability-table reducer result: \n{}", reducedCase);
-                        TableTool.randomReducer.getStatistics();
+                        log.info("Probability-table reducer result: \n{}", reducedCase);            
                         break;
                     case "epsilon-greedy":
                         reducedCase = TableTool.epsilonGreedyReducer.reduce(testCase.toString());
                         log.info("Epsilon-greedy reducer result: \n{}", reducedCase);
-                        TableTool.randomReducer.getStatistics();
                         break;
                     case "all":
-                        reducedCase = TableTool.randomReducer.reduce(testCase.toString());
+                        reducedCaseOfAllRandom = TableTool.randomReducer.reduce(testCase.toString());
                         log.info("Random reducer result: \n{}", reducedCase);
-                        reducedCase = TableTool.probabilityTableReducer.reduce(testCase.toString());
+                        reducedCaseOfAllProb = TableTool.probabilityTableReducer.reduce(testCase.toString());
                         log.info("Probability-table reducer result: \n{}", reducedCase);
-                        reducedCase = TableTool.epsilonGreedyReducer.reduce(testCase.toString());
+                        reducedCaseOfAllEpsilon = TableTool.epsilonGreedyReducer.reduce(testCase.toString());
                         log.info("Epsilon-greedy reducer result: \n{}", reducedCase);
                     default:
                         break;
                 }
-                // 输出原始bug case
-                saveTestCase(testCase.toString(),
-                        TableTool.bugPath + File.separator + "bug_" + TableTool.bugFound + "_origin.txt");
-                // 输出简化后的bug case
-                saveTestCase(reducedCase,
-                        TableTool.bugPath + File.separator + "bug_" + TableTool.bugFound + "_reduced.txt");
+                if(TableTool.reducerType.equals("random")            || 
+                   TableTool.reducerType.equals("probability-table") || 
+                   TableTool.reducerType.equals("epsilon-greedy")){
+                    // 输出原始bug case
+                    saveTestCase(testCase.toString(),
+                            TableTool.bugPath + File.separator + "bug_" + TableTool.bugFound + "_origin.txt");
+                    // 输出简化后的bug case
+                    saveTestCase(reducedCase,
+                            TableTool.bugPath + File.separator + "bug_" + TableTool.bugFound +"_"+TableTool.reducerType +"_reduced.txt");
+                }       
+                else if(TableTool.reducerType.equals("all")){
+                    // 输出原始bug case
+                    saveTestCase(testCase.toString(),
+                            TableTool.bugPath + File.separator + "bug_" + TableTool.bugFound + "_origin.txt");
+                    // 分别输出简化后的bug case
+                    saveTestCase(reducedCaseOfAllRandom,
+                            TableTool.bugPath + File.separator + "bug_" + TableTool.bugFound +"_random_reduced.txt");
+                    saveTestCase(reducedCaseOfAllProb,
+                            TableTool.bugPath + File.separator + "bug_" + TableTool.bugFound +"_probability-table_reduced.txt");
+                    saveTestCase(reducedCaseOfAllEpsilon,
+                            TableTool.bugPath + File.separator + "bug_" + TableTool.bugFound +"_epsilon-greedy_reduced.txt");
+                }
                 TableTool.bugFound++;
             }
             if (TableTool.isFilterDuplicateBug && !res) {

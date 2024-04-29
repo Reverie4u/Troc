@@ -69,7 +69,8 @@ public class Reducer {
     double[] simplificationRate;
     // 每一层贡献的简化率
     double[] addedSimplificationRate;
-
+    // 统计数据
+    StringBuffer statistics;
     public int getVaildReduceCount() {
         return vaildReduceCount;
     }
@@ -89,6 +90,7 @@ public class Reducer {
         reduceCountForEachLevel = new int[5];
         reduceRateForEachLevel = new double[5];
         reduceRateContribOfEachLevel = new double[5];
+        statistics = new StringBuffer();
         for (int i = 0; i <= 4; i++) {
             lengthOfCase[i] = 0;
             simplificationRate[i] = 0.0;
@@ -288,7 +290,7 @@ public class Reducer {
         // System.out.println(testCase.toString());
 
         // 计算第三层之后的简化样例字符数
-        // lengthOfCase[3] += testCase.toString().length();
+        lengthOfCase[3] += testCase.toString().length();
         log.info("-------------------------------Fourth Level-------------------------------");
         // 第四层：*常量简化层*
         for (int i = 1; i <= maxReduceCount; i++)
@@ -296,12 +298,12 @@ public class Reducer {
 
         // 计算第四层之后的简化样例字符数
         lengthOfCase[4] += testCase.toString().length();
-
+        statistics.append(testCase.toString()+"\n\n");
+        statistics.append("Reducer Type:"+TableTool.reducerType+"\n");
         // 获取简化统计数据
         getStatistics();
-
-        String res = testCase.toString();
-
+        String res = statistics.toString();
+        statistics.delete(0, statistics.length());
         System.out.println(res);
         return res;
     }
@@ -332,22 +334,31 @@ public class Reducer {
 
     public void printReduceCountRate() {
         log.info("---------------------------Reduce Rate Statistics Start---------------------------");
+        statistics.append("---------------------------Reduce Rate Statistics Start---------------------------\n");
         // 总共的有效简化率
         for (int i = 1; i <= 4; i++) {
             // 每层的有效简化贡献率 ；每层的有效简化率
             log.info("{}th Level: Valid Reduce Rate Contrib. {}, Valid Reduce Rate {}", String.valueOf(i),
                     String.valueOf(reduceRateContribOfEachLevel[i]), String.valueOf(reduceRateForEachLevel[i]));
+            statistics.append(String.valueOf(i)+"th Level: Valid Reduce Rate Contrib.: "+String.valueOf(reduceRateContribOfEachLevel[i])
+                              +", Valid Reduce Rate: "+String.valueOf(reduceRateForEachLevel[i])+"\n");
         }
+        statistics.append("Total Valid Reduce Rate : "+String.valueOf(validReduceRate)+"\n");
         log.info("Total Valid Reduce Rate {}", String.valueOf(validReduceRate));
+        statistics.append("---------------------------Reudce Rate Statistics End  ---------------------------\n");
         log.info("---------------------------Reudce Rate Statistics End  ---------------------------");
     }
 
     public void printSimplificationRate() {
         log.info("---------------------------Simplification Rate Statistics Start---------------------------");
+        statistics.append("---------------------------Simplification Rate Statistics Start---------------------------\n");
         for (int i = 1; i <= 4; i++) {
             log.info("{}th Level: Simplification Rate {}, Added Rate: {}", String.valueOf(i),
                     String.valueOf(simplificationRate[i]), String.valueOf(addedSimplificationRate[i]));
+            statistics.append(String.valueOf(i)+"th Level: Simplification Rate :"+String.valueOf(simplificationRate[i])+
+                              ", Added Rate :"+String.valueOf(addedSimplificationRate[i])+"\n");
         }
+        statistics.append("---------------------------Simplification Rate Statistics End  ---------------------------\n");
         log.info("---------------------------Simplification Rate Statistics End  ---------------------------");
     }
 
