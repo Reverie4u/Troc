@@ -33,8 +33,8 @@ public class TableTool {
     static private final String TrocTablePrefix = "_troc_";
     static private final String BackupName = "backup";
     static private final String OriginalName = "origin";
-    static public final int TxSizeMin = 8;
-    static public final int TxSizeMax = 10;
+    static public final int TxSizeMin = 3;
+    static public final int TxSizeMax = 6;
     static public final Transaction txInit = new Transaction(0);
     static public final Randomly rand = new Randomly();
     static public final BugReport bugReport = new BugReport();
