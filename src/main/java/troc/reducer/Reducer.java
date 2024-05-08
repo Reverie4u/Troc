@@ -299,7 +299,7 @@ public class Reducer {
         // 计算第四层之后的简化样例字符数
         lengthOfCase[4] += testCase.toString().length();
         statistics.append(testCase.toString()+"\n\n");
-        statistics.append("Reducer Type:"+TableTool.reducerType+"\n");
+        statistics.append("Reducer Type:"+TableTool.reducerType+" Epsilon=0.7\n");
         // 获取简化统计数据
         getStatistics();
         String res = statistics.toString();
@@ -318,8 +318,10 @@ public class Reducer {
         // 打印有效简化率
         printReduceCountRate();
     }
-
+    
     public void calculateReduceCountRate() {
+        allReduceCount = 0;
+        vaildReduceCount = 0;
         for (int i = 1; i <= 4; i++) {
             allReduceCount += reduceCountForEachLevel[i];
             vaildReduceCount += validReduceCountForEachLevel[i];
@@ -342,6 +344,10 @@ public class Reducer {
                     String.valueOf(reduceRateContribOfEachLevel[i]), String.valueOf(reduceRateForEachLevel[i]));
             statistics.append(String.valueOf(i)+"th Level: Valid Reduce Rate Contrib.: "+String.valueOf(reduceRateContribOfEachLevel[i])
                               +", Valid Reduce Rate: "+String.valueOf(reduceRateForEachLevel[i])+"\n");
+        }
+        for (int i=1;i<=4;i++){
+            statistics.append(String.valueOf(i)+"th Level: Valid Reduce Count: "+String.valueOf(validReduceCountForEachLevel[i])
+            +", Reduce Count: "+String.valueOf(reduceCountForEachLevel[i])+"\n");
         }
         statistics.append("Total Valid Reduce Rate : "+String.valueOf(validReduceRate)+"\n");
         log.info("Total Valid Reduce Rate {}", String.valueOf(validReduceRate));

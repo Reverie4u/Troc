@@ -86,7 +86,7 @@ public abstract class Table {
             log.info("Create table failed, {}", getCreateTableSql());
         }
         // 随机生成创建索引/插入语句
-        for (int i = 0; i < Randomly.getNextInt(5, 15); i++) {
+        for (int i = 0; i < Randomly.getNextInt(8, 15); i++) {
             String initSQL;
             if (Randomly.getNextInt(0, 15) == 10) {
                 initSQL = genAddIndexStatement();

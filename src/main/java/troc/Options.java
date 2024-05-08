@@ -62,7 +62,7 @@ public class Options {
     private boolean reducerSwitchOn = true;
 
     @Parameter(names = "--reducer-type", description = "Reducer type, can be random, epsilon-greedy, probability-table, all")
-    private String reducerType = "all";
+    private String reducerType = "random";
 
     @Parameter(names = "--max-reduce-count", description = "The maximum number of reduction")
     private int maxReduceCount = 5;
