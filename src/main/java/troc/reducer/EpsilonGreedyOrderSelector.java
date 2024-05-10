@@ -64,6 +64,7 @@ public class EpsilonGreedyOrderSelector<T> implements OrderSelector<T> {
             return maxEntry.getKey();
         }
     }
+    
     public EpsilonGreedyOrderSelector(List<T> candidates) {
         candidatesGainMap = new HashMap<>();
         for (T candidate : candidates) {

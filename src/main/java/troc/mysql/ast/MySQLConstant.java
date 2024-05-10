@@ -278,7 +278,7 @@ public abstract class MySQLConstant implements MySQLExpression {
         private long value;
         private String stringRepresentation;
         private boolean isSigned;
-
+        private boolean canSimplify = true;
         public void setIntConstant(long newValue, boolean newIsSigned){
             this.value = newValue;
             this.isSigned = newIsSigned;
@@ -293,7 +293,12 @@ public abstract class MySQLConstant implements MySQLExpression {
             this.stringRepresentation = newStringRepresentation;
             isSigned = true;
         }
-        
+        public boolean getCanSimplify(){
+            return this.canSimplify;
+        }
+        public void setCanSimplify(boolean newCanSimplify){
+            this.canSimplify = newCanSimplify;
+        }
         public MySQLIntConstant(long value) {
             this(value, true);
         }

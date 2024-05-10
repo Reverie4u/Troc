@@ -15,6 +15,7 @@ import troc.Randomly;
 import troc.SimplifyType;
 import troc.StatementCell;
 import troc.StatementType;
+import troc.ConstantStatementType;
 import troc.TableTool;
 import troc.Transaction;
 import troc.WhereExprType;
@@ -41,7 +42,7 @@ public class Reducer {
     // 第三层：表达式简化层选择器
     OrderSelector<WhereExprType> exprSimplifySelector;
     // 第四层：常量简化层选择器
-    OrderSelector<StatementType> constantSimplifySelector;
+    OrderSelector<ConstantStatementType> constantSimplifySelector;
     // 第一层简化的map
     Map<StatementType, ArrayList<StatementCell>> stmtTypeMap;
     // 第一层简化失败的语句map
@@ -104,7 +105,7 @@ public class Reducer {
         List<StatementType> candidatesForDelStmt = new ArrayList<>();
         List<SimplifyType> candidatesForSimplifyStmt = new ArrayList<>();
         List<WhereExprType> candidatesForSimplifyExpr = new ArrayList<>();
-        List<StatementType> candidatesForSimplifyCons = new ArrayList<>();
+        List<ConstantStatementType> candidatesForSimplifyCons = new ArrayList<>();
         StatementType[] typesForDelStmt = new StatementType[] {
                 StatementType.SELECT, StatementType.UPDATE,
                 StatementType.INSERT, StatementType.DELETE,
@@ -128,10 +129,11 @@ public class Reducer {
                 WhereExprType.MySQLUnaryPostfixOperation,
                 WhereExprType.MySQLUnaryPrefixOperation
         };
-        StatementType[] typesForSimplifyCons = new StatementType[] {
-                StatementType.SELECT, StatementType.UPDATE,
-                StatementType.INSERT, StatementType.DELETE,
-                StatementType.SELECT_SHARE, StatementType.SELECT_UPDATE
+        ConstantStatementType[] typesForSimplifyCons = new ConstantStatementType[] {
+                ConstantStatementType.SELECT, 
+                ConstantStatementType.INSERT, ConstantStatementType.DELETE,
+                ConstantStatementType.SELECT_SHARE, ConstantStatementType.SELECT_UPDATE,
+                ConstantStatementType.UPDATE_SET, ConstantStatementType.UPDATE_WHERE
         };
         for (StatementType type : typesForDelStmt) {
             stmtTypeMap.put(type, new ArrayList<>());
@@ -144,7 +146,7 @@ public class Reducer {
         for (WhereExprType type : typesForSimplifyExpr) {
             candidatesForSimplifyExpr.add(type);
         }
-        for (StatementType type : typesForSimplifyCons) {
+        for (ConstantStatementType type : typesForSimplifyCons) {
             candidatesForSimplifyCons.add(type);
         }
 
@@ -226,6 +228,7 @@ public class Reducer {
         }
         // 计算原样例的字符数
         lengthOfCase[0] += testCase.toString().length();
+         
         log.info("-------------------------------First Level-------------------------------");
 
         // 选择一个语句类型
@@ -254,8 +257,9 @@ public class Reducer {
         lengthOfCase[1] += testCase.toString().length();
         log.info("-------------------------------Second Level-------------------------------");
         // 第二层：*语句简化层*
-        for (int i = 1; i <= maxReduceCount; i++) {
-            SimplifyType typeForStmtSimplify = stmtSimplifySelector.selectNext();
+         for (int i = 1; i <= maxReduceCount; i++) {
+          //  SimplifyType typeForStmtSimplify = stmtSimplifySelector.selectNext();
+          SimplifyType typeForStmtSimplify = SimplifyType.DEL_SELECT_ROL;
             switch (typeForStmtSimplify.toString()) {
                 case "SIMPLIFY_TABLE":
                     // 简化表定义
@@ -279,7 +283,7 @@ public class Reducer {
                     break;
             }
         }
-
+        
         // 计算第二层之后的简化样例字符数
         lengthOfCase[2] += testCase.toString().length();
         log.info("-------------------------------Third Level-------------------------------");
@@ -298,8 +302,12 @@ public class Reducer {
 
         // 计算第四层之后的简化样例字符数
         lengthOfCase[4] += testCase.toString().length();
+        
         statistics.append(testCase.toString() + "\n\n");
-        statistics.append("Reducer Type:" + TableTool.reducerType + " Epsilon=0.7\n");
+        if(TableTool.reducerType.equals("All") || TableTool.reducerType.equals("Epsilon"))
+            statistics.append("Reducer Type:" + TableTool.reducerType + " Epsilon = 0.7\n");
+        else
+        statistics.append("Reducer Type:" + TableTool.reducerType + "\n");
         // 获取简化统计数据
         getStatistics();
         String res = statistics.toString();
@@ -432,7 +440,7 @@ public class Reducer {
         }
         int simpilifyIdx = (int) (Math.random() * stmtListForSelect.size());
 
-        // int simpilifyIdx = 6;
+       //  int simpilifyIdx = 0;
         StatementCell selectCell = stmtListForSelect.get(simpilifyIdx);
         StatementCell selectCellCopy = selectCell.copy();
         if (selectCellCopy.getWhereClause() == "")
@@ -454,7 +462,9 @@ public class Reducer {
             return testCase;
         }
         int colLength = selectWords.length;
-        for (int idx = 0; idx < colLength - 1; idx++) {
+        int idx = (int) (Math.random() * colLength);
+        // 如果要反复删除就恢复for注释
+        // for (int idx = 0; idx < colLength - 1; idx++) {
             StringBuffer newSelectStr = new StringBuffer();
             for (int i = 0, cnt = 0; i < selectWords.length; i++) {
                 if (i == idx)
@@ -497,18 +507,26 @@ public class Reducer {
                 validReduceCountForEachLevel[2]++;
                 reduceCountForEachLevel[2]++;
 
-                // 删除后仍能复现bug则更新测试用例q
+                // 删除后仍能复现bug则更新测试用例
 
                 testCase = testCaseClone(clonedTestCase);
+                return testCase;
+
+                /* 要反复删除则恢复下列注释
                 idx--;
                 selectCell = stmtListForSelect.get(simpilifyIdx);
+                */
             } else {
                 log.info("selectSQL [{}] simpilify failed",
                         selectCell.toString() + ":" + selectCell.getStatement().toString());
                 stmtSimplifySelector.updateWeight(type, false);
                 reduceCountForEachLevel[2]++;
+                return testCase;
+                /* 要反复删除则恢复下列注释
                 selectCell = selectCellCopy;
+                */
             }
+            /* 要反复删除则恢复下列注释
             selectCellCopy = selectCell.copy();
             if (selectCellCopy.getWhereClause() == "")
                 selectCellCopy.setStmt(selectCellCopy.getStatement() + " WHERE");
@@ -521,16 +539,17 @@ public class Reducer {
             lastIdx = finalReplacedSelectStmt.lastIndexOf("@");
             selectStr = finalReplacedSelectStmt.substring(firstIdx + 1, lastIdx - 1);
             selectWords = selectStr.split(",");
-            colLength = selectWords.length;
-        }
-        return testCase;
+            colLength = selectWords.length; 
+            */
+        // }
+        // return testCase;
     }
 
     private TestCase simplifyConstant(TestCase testCase, OracleChecker oracleChecker) {
         TestCase clonedTestCase = testCaseClone(testCase);
         // 选取需要简化的类型
-        StatementType type = constantSimplifySelector.selectNext();
-        // StatementType type = StatementType.UPDATE;
+        ConstantStatementType type = constantSimplifySelector.selectNext();
+       //  ConstantStatementType type = ConstantStatementType.SELECT;
         ArrayList<StatementCell> stmtListForType = new ArrayList<>();
         for (StatementCell stmt : clonedTestCase.prepareTableStmts) {
             if (stmt.getType().toString().equals(type.toString())) {
@@ -538,12 +557,23 @@ public class Reducer {
             }
         }
         for (StatementCell stmt : clonedTestCase.tx1.getStatements()) {
-            if (stmt.getType().toString().equals(type.toString())) {
+            // 由于语句类型里只有UPDATE 因此常量简化UPDATE_SET类型或者UPDATE_WHERE类型时都可以将UPDATE语句加入
+            if (stmt.getType().toString().equals("UPDATE")){
+                if(type.toString().equals("UPDATE_SET") || type.toString().equals("UPDATE_WHERE"))
+                    stmtListForType.add(stmt);
+            }
+
+            else if (stmt.getType().toString().equals(type.toString())) {
                 stmtListForType.add(stmt);
             }
         }
         for (StatementCell stmt : clonedTestCase.tx2.getStatements()) {
-            if (stmt.getType().toString().equals(type.toString())) {
+            // 由于语句类型里只有UPDATE 因此常量简化UPDATE_SET类型或者UPDATE_WHERE类型时都可以将UPDATE语句加入
+            if (stmt.getType().toString().equals("UPDATE")){
+                if(type.toString().equals("UPDATE_SET") || type.toString().equals("UPDATE_WHERE"))
+                    stmtListForType.add(stmt);
+            }
+            else if (stmt.getType().toString().equals(type.toString())) {
                 stmtListForType.add(stmt);
             }
         }
@@ -553,22 +583,24 @@ public class Reducer {
             reduceCountForEachLevel[4]++;
             return testCase;
         }
-        int simpilifyIdx = (int) (Math.random() * stmtListForType.size());
-        // int simpilifyIdx = 0;
+         int simpilifyIdx = (int) (Math.random() * stmtListForType.size());
+       //  int simpilifyIdx = 2;
 
         StatementCell constantCell = stmtListForType.get(simpilifyIdx);
-        switch (constantCell.getType().toString()) {
+        switch (type.toString()) {
             case "INSERT":
                 testCase = simplifyConstantOfWherePrefix(constantCell, clonedTestCase, testCase, oracleChecker, type);
                 break;
             case "SELECT":
                 testCase = simplifyConstantOfWhereClause(constantCell, clonedTestCase, testCase, oracleChecker, type);
                 break;
-            case "UPDATE":
-                testCase = simplifyConstantOfWherePrefixAnbWhereClause(constantCell, clonedTestCase, testCase,
+            case "UPDATE_SET":
+                testCase = simplifyConstantOfWherePrefixOfUpdate(constantCell, clonedTestCase, testCase,
                         oracleChecker, type);
                 break;
-
+            case "UPDATE_WHERE":
+                testCase = simplifyConstantOfWhereClause(constantCell, clonedTestCase, clonedTestCase, oracleChecker, type);
+                break;
             case "SELECT_SHARE":
                 testCase = simplifyConstantOfWhereClause(constantCell, clonedTestCase, testCase, oracleChecker, type);
                 break;
@@ -585,7 +617,7 @@ public class Reducer {
     }
 
     private TestCase simplifyConstantOfWherePrefix(StatementCell constantCell, TestCase clonedTestCase,
-            TestCase testCase, OracleChecker oracleChecker, StatementType type) {
+            TestCase testCase, OracleChecker oracleChecker, ConstantStatementType type) {
         StatementCell constantCellCopy = constantCell.copy();
         // 获得一条insert语句
         String insertStmt = constantCellCopy.getStatement();
@@ -598,7 +630,9 @@ public class Reducer {
         String[] valueWords = valueStr.split(",");
 
         int colLength = valueWords.length;
-        for (int idx = 0; idx < colLength; idx++) {
+        int idx = (int) (Math.random() * colLength);
+        // 如果要反复删除就恢复for注释
+        // for (int idx = 0; idx < colLength; idx++) {
             Integer num = Randomly.getNextInt(-10, 10);
             String numStr = num.toString();
             int tmp = -1314;
@@ -612,7 +646,8 @@ public class Reducer {
                         constantCell.toString() + ":" + constantCell.getStatement().toString());
                 constantSimplifySelector.updateWeight(type, false);
                 reduceCountForEachLevel[4]++;
-                continue;
+                return testCase;
+               /// continue;
             }
             if (idx == 0)
                 valueWords[idx] = numStr;
@@ -640,14 +675,17 @@ public class Reducer {
                 reduceCountForEachLevel[4]++;
                 // 删除后仍能复现bug则更新测试用例
                 testCase = testCaseClone(clonedTestCase);
-
+                return testCase;
             } else {
                 log.info("Constant of wherePrefixSQL [{}] simpilify failed",
                         constantCell.toString() + ":" + constantCell.getStatement().toString());
                 constantSimplifySelector.updateWeight(type, false);
                 reduceCountForEachLevel[4]++;
-                constantCell = constantCellCopy;
+                return testCase;
+                /* 如果要反复删除就恢复下列注释
+                constantCell = constantCellCopy;*/
             }
+            /* 如果要反复删除就恢复下列注释
             constantCellCopy = constantCell.copy();
             // 获得一条insert语句
             insertStmt = constantCellCopy.getStatement();
@@ -658,12 +696,13 @@ public class Reducer {
             valueStr = insertStmt.substring(valueLeftBracket + 1, valueRightBracket);
             valueWords = valueStr.split(",");
             colLength = valueWords.length;
-        }
-        return testCase;
+            */
+        // }
+        // return testCase;
     }
 
     private TestCase simplifyConstantOfWhereClause(StatementCell constantCell, TestCase clonedTestCase,
-            TestCase testCase, OracleChecker oracleChecker, StatementType type) {
+            TestCase testCase, OracleChecker oracleChecker, ConstantStatementType type) {
         StatementCell constantCellCopy = constantCell.copy();
         MySQLExpression rootPredicate = constantCell.getPredicate();
         if (rootPredicate == null) {
@@ -673,6 +712,8 @@ public class Reducer {
             reduceCountForEachLevel[4]++;
             return testCase;
         }
+        // 用来判断整个where子句有没有常量 
+        boolean hasSimplifyConstantNode = false;
         LinkedList<MySQLExpression> nodeQueue = new LinkedList<>();
         nodeQueue.add(rootPredicate);
         while (!nodeQueue.isEmpty()) {
@@ -680,14 +721,21 @@ public class Reducer {
             nodeQueue.removeFirst();
             // 如果是常量节点的话
             if (judgeConstantNode(node.getClass().getSimpleName())) {
+                hasSimplifyConstantNode = true;
                 long num = Randomly.getNextInt(-10, 10);
                 MySQLIntConstant nodeInt = (MySQLIntConstant) node;
+                if(nodeInt.getCanSimplify() == false) {
+                    hasSimplifyConstantNode = false;
+                    continue;
+                }
                 long tmp = nodeInt.getInt();
                 if (tmp >= -10 && tmp <= 10) {
-                    log.info("Constant of whereClauseSQL [{}] simpilify failed ",
-                            constantCell.toString() + ":" + constantCell.getStatement().toString());
-                    constantSimplifySelector.updateWeight(type, false);
-                    reduceCountForEachLevel[4]++;
+                    // log.info("Constant of whereClauseSQL [{}] simpilify failed ",
+                    //         constantCell.toString() + ":" + constantCell.getStatement().toString());
+                    // constantSimplifySelector.updateWeight(type, false);
+                    // reduceCountForEachLevel[4]++;
+                    nodeInt.setCanSimplify(false);
+                    hasSimplifyConstantNode = false;
                     continue;
                 }
                 nodeInt.setIntConstant(num, String.valueOf(num));
@@ -702,15 +750,19 @@ public class Reducer {
                     reduceCountForEachLevel[4]++;
                     // 删除后仍能复现bug则更新测试用例
                     testCase = testCaseClone(clonedTestCase);
-
+                    return testCase;
                 } else {
                     log.info("Constant of whereClauseSQL [{}] simpilify failed ",
                             constantCell.toString() + ":" + constantCell.getStatement().toString());
                     constantSimplifySelector.updateWeight(type, false);
                     reduceCountForEachLevel[4]++;
+                    nodeInt.setCanSimplify(false);
+                    return testCase;
+                    /* 如果要反复删除则恢复下列注释
                     if (nodeQueue.isEmpty()) {
                         break;
                     }
+                    */
                 }
             } else {
                 switch (node.getClass().getSimpleName()) {
@@ -759,13 +811,20 @@ public class Reducer {
                         nodeQueue.add(tmpNodeForUnaryPostFix.getExpression());
                         break;
 
-                    case "MySQLUnaryfixOperation":
+                    case "MySQLUnaryPrefixOperation":
                         MySQLUnaryPrefixOperation tmpNodeForUnaryPreFix = (MySQLUnaryPrefixOperation) node;
                         nodeQueue.add(tmpNodeForUnaryPreFix.getExpression());
                         break;
                 }
             }
 
+        }
+        // 如果遍历了整个where子句都没发现常量节点表明这个更新是失败的
+        if (hasSimplifyConstantNode == false) {
+            log.info("Constant of whereClauseSQL [{}] simpilify failed ",
+                    constantCell.toString() + ":" + constantCell.getStatement().toString());
+            constantSimplifySelector.updateWeight(type, false);
+            reduceCountForEachLevel[4]++;
         }
         return testCase;
     }
@@ -780,8 +839,8 @@ public class Reducer {
         return Integer.parseInt(newStr.toString());
     }
 
-    private TestCase simplifyConstantOfWherePrefixAnbWhereClause(StatementCell constantCell, TestCase clonedTestCase,
-            TestCase testCase, OracleChecker oracleChecker, StatementType type) {
+    private TestCase simplifyConstantOfWherePrefixOfUpdate(StatementCell constantCell, TestCase clonedTestCase,
+            TestCase testCase, OracleChecker oracleChecker, ConstantStatementType type) {
         StatementCell constantCellCopy = constantCell.copy();
         if (constantCellCopy.getWhereClause() == "")
             constantCellCopy.setStmt(constantCellCopy.getStatement() + " WHERE");
@@ -797,8 +856,8 @@ public class Reducer {
         String updateColStr = finalReplacedUpdatestmt.substring(updateColLeftIdx + 1, updateColRightIdx - 1);
         String[] updateColWords = updateColStr.split(",");
         int colLength = updateColWords.length;
-
-        for (int idx = 0; idx < colLength; idx++) {
+        int idx = (int) (Math.random() * colLength);     
+       // for (int idx = 0; idx < colLength; idx++) {
             Integer num = Randomly.getNextInt(-10, 10);
             String numStr = num.toString();
 
@@ -809,7 +868,10 @@ public class Reducer {
                         constantCell.toString() + ":" + constantCell.getStatement().toString());
                 constantSimplifySelector.updateWeight(type, false);
                 reduceCountForEachLevel[4]++;
+                return testCase;
+                /*  如果要反复删除就恢复注释 
                 continue;
+                */
             }
             updateColWords[idx] = updateColWords[idx].substring(0, equalIdx + 1) + numStr;
             StringBuffer newUpdateColStr = new StringBuffer();
@@ -847,14 +909,17 @@ public class Reducer {
                 reduceCountForEachLevel[4]++;
                 // 删除后仍能复现bug则更新测试用例
                 testCase = testCaseClone(clonedTestCase);
-
+                return testCase;
             } else {
                 log.info("Constant of wherePrefixAndWhereClauseSQL [{}] simpilify failed",
                         constantCell.toString() + ":" + constantCell.getStatement().toString());
                 constantSimplifySelector.updateWeight(type, false);
                 reduceCountForEachLevel[4]++;
-                constantCell = constantCellCopy;
+                return testCase;
+                /*  如果要反复删除就恢复注释 
+                constantCell = constantCellCopy;*/
             }
+            /*  如果要反复删除就恢复注释 
             constantCellCopy = constantCell.copy();
             if (constantCellCopy.getWhereClause() == "")
                 constantCellCopy.setStmt(constantCellCopy.getStatement() + " WHERE");
@@ -869,14 +934,9 @@ public class Reducer {
             // 得到更新列对
             updateColStr = finalReplacedUpdatestmt.substring(updateColLeftIdx + 1, updateColRightIdx - 1);
             updateColWords = updateColStr.split(",");
-            colLength = updateColWords.length;
-        }
-        if (constantCell.getPredicate() == null) {
-            constantSimplifySelector.updateWeight(type, false);
-            return testCase;
-        }
-        testCase = simplifyConstantOfWhereClause(constantCellCopy, clonedTestCase, testCase, oracleChecker, type);
-        return testCase;
+            colLength = updateColWords.length;*/
+       // }
+       // return testCase;
     }
 
     private TestCase simplifyWhereExpr(TestCase testCase, OracleChecker oracleChecker) {
@@ -989,7 +1049,7 @@ public class Reducer {
                         tmpNodeForUnaryPostFix.setExpression(nodeInt);
                         break;
 
-                    case "MySQLUnaryfixOperation":
+                    case "MySQLUnaryPrefixOperation":
                         MySQLUnaryPrefixOperation tmpNodeForUnaryPrefix = (MySQLUnaryPrefixOperation) node.left;
                         tmpNodeForUnaryPrefix.setExpr(nodeInt);
                         break;
@@ -1107,7 +1167,7 @@ public class Reducer {
                         }
                         break;
 
-                    case "MySQLUnaryfixOperation":
+                    case "MySQLUnaryPrefixOperation":
                         MySQLUnaryPrefixOperation tmpNodeForUnaryPreFix = (MySQLUnaryPrefixOperation) node.right;
                         if (!judgeLeafNode(tmpNodeForUnaryPreFix.getExpression().getClass().getSimpleName())) {
                             addNodeToQueue(isAllLeafNodes, nodeQueue, tmpNodeForUnaryPreFix,
@@ -1222,6 +1282,7 @@ public class Reducer {
             return testCase;
         }
         int simplifyIdx = (int) (Math.random() * insertStmtList.size());
+      //  int simplifyIdx = 6;
         StatementCell insertCell = insertStmtList.get(simplifyIdx);
         StatementCell insertCellCopy = insertCell.copy();
         // 随机找个insert语句
@@ -1245,9 +1306,11 @@ public class Reducer {
             reduceCountForEachLevel[2]++;
             return testCase;
         }
-        // 剩下的都是至少两列插入，随机选择一列删除
+        // 剩下的都是至少两列插入，一列删除
         int colLength = columnWords.length;
-        for (int idx = 0; idx < colLength - 1; idx++) {
+        int idx = (int) (Math.random() * colLength);
+     // 如果要反复删除的话就恢复for循环
+     //  for (int idx = 0; idx < colLength - 1; idx++) {
             StringBuffer newColumnStr = new StringBuffer();
             StringBuffer newValueStr = new StringBuffer();
             for (int i = 0, cntVal = 0, cntCol = 0, cnt = 0; i < colLength; i++) {
@@ -1330,17 +1393,24 @@ public class Reducer {
                 reduceCountForEachLevel[2]++;
                 // 删除后仍能复现bug则更新测试用例
                 testCase = testCaseClone(clonedTestCase);
-                idx--;
-                insertCell = insertStmtList.get(simplifyIdx);
+                return testCase;
+                /*  如果要反复删除的话就恢复这段注释
+                 idx--;
+                 insertCell = insertStmtList.get(simplifyIdx);
+                */
             } else {
                 log.info("insertSQL [{}] simpilify failed",
                         insertCell.toString() + ":" + insertCell.getStatement().toString());
                 stmtSimplifySelector.updateWeight(type, false);
                 reduceCountForEachLevel[2]++;
+                return testCase;
+                /* 如果要反复删除的话就恢复这段注释
                 insertCell = insertCellCopy;
+                */ 
             }
+        
             // 继续下一轮 把insertCell更新为最新的
-
+            /* 如果要反复删除的话就恢复这段注释
             insertCellCopy = insertCell.copy();
             // 随机找个insert语句
             insertStmt = insertCellCopy.getStatement();
@@ -1356,9 +1426,9 @@ public class Reducer {
             valueStr = insertStmt.substring(valueLeftBracket + 1, valueRightBracket);
             valueWords = valueStr.split(",");
             colLength = valueWords.length;
-        }
-
-        return testCase;
+            */
+     //   }  
+     //   return testCase;
     }
 
     private TestCase delUpdateCol(TestCase testCase, OracleChecker oracleChecker, SimplifyType type) {
@@ -1378,7 +1448,7 @@ public class Reducer {
             reduceCountForEachLevel[2]++;
             return testCase;
         }
-        int simplifyIdx = (int) (Math.random() * updateStmtList.size());
+         int simplifyIdx = (int) (Math.random() * updateStmtList.size());
         // int simplifyIdx = 0;
         StatementCell upCell = updateStmtList.get(simplifyIdx);
         StatementCell UpCellCopy = upCell.copy();
@@ -1405,7 +1475,9 @@ public class Reducer {
             return testCase;
         }
         int colLength = updateWords.length;
-        for (int idx = 0; idx < colLength - 1; idx++) {
+        int idx = (int) (Math.random() * colLength);
+      //  要反复删除则恢复for循环注释
+      //  for (int idx = 0; idx < colLength - 1; idx++) {
             // 删除并重新拼接
             StringBuffer updateStmt = new StringBuffer();
             for (int i = 0, cnt = 0; i < updateWords.length; i++) {
@@ -1448,15 +1520,21 @@ public class Reducer {
 
                 // 删除后仍能复现bug则更新测试用例
                 testCase = testCaseClone(clonedTestCase);
+                return testCase;
+                /* 如果要反复删除的话就恢复这段注释
                 idx--;
                 upCell = updateStmtList.get(simplifyIdx);
+                */
             } else {
                 log.info("updateSQL [{}] simpilify failed", upCell.toString() + ":" + upCell.getStatement().toString());
                 stmtSimplifySelector.updateWeight(type, false);
                 reduceCountForEachLevel[2]++;
+                return testCase;
+                /*  如果要反复删除的话就恢复这段注释
                 upCell = UpCellCopy;
+                */
             }
-
+            /*  如果要反复删除的话就恢复这段注释 
             UpCellCopy = upCell.copy();
             if (UpCellCopy.getWhereClause() == "")
                 UpCellCopy.setStmt(UpCellCopy.getStatement() + " WHERE");
@@ -1471,9 +1549,10 @@ public class Reducer {
             // 获取更新列项
             updateWords = updateStr.split(",");
             colLength = updateWords.length;
-        }
+            */
+       // }
 
-        return testCase;
+       // return testCase;
     }
 
     private StatementCell deleteStatement(TestCase testCase) {
