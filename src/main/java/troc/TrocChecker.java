@@ -115,7 +115,7 @@ public class TrocChecker {
                         break;
                     case "probability-table":
                         reducedCase = TableTool.probabilityTableReducer.reduce(testCase.toString());
-                        log.info("Probability-table reducer result: \n{}", reducedCase);            
+                        log.info("Probability-table reducer result: \n{}", reducedCase);
                         break;
                     case "epsilon-greedy":
                         reducedCase = TableTool.epsilonGreedyReducer.reduce(testCase.toString());
@@ -123,35 +123,37 @@ public class TrocChecker {
                         break;
                     case "all":
                         reducedCaseOfAllRandom = TableTool.randomReducer.reduce(testCase.toString());
-                        log.info("Random reducer result: \n{}", reducedCase);
+                        log.info("Random reducer result: \n{}", reducedCaseOfAllRandom);
                         reducedCaseOfAllProb = TableTool.probabilityTableReducer.reduce(testCase.toString());
-                        log.info("Probability-table reducer result: \n{}", reducedCase);
+                        log.info("Probability-table reducer result: \n{}", reducedCaseOfAllProb);
                         reducedCaseOfAllEpsilon = TableTool.epsilonGreedyReducer.reduce(testCase.toString());
-                        log.info("Epsilon-greedy reducer result: \n{}", reducedCase);
+                        log.info("Epsilon-greedy reducer result: \n{}", reducedCaseOfAllEpsilon);
                     default:
                         break;
                 }
-                if(TableTool.reducerType.equals("random")            || 
-                   TableTool.reducerType.equals("probability-table") || 
-                   TableTool.reducerType.equals("epsilon-greedy")){
+                if (TableTool.reducerType.equals("random") ||
+                        TableTool.reducerType.equals("probability-table") ||
+                        TableTool.reducerType.equals("epsilon-greedy")) {
                     // 输出原始bug case
                     saveTestCase(testCase.toString(),
                             TableTool.bugPath + File.separator + "bug_" + TableTool.bugFound + "_origin.txt");
                     // 输出简化后的bug case
                     saveTestCase(reducedCase,
-                            TableTool.bugPath + File.separator + "bug_" + TableTool.bugFound +"_"+TableTool.reducerType +"_reduced.txt");
-                }       
-                else if(TableTool.reducerType.equals("all")){
+                            TableTool.bugPath + File.separator + "bug_" + TableTool.bugFound + "_"
+                                    + TableTool.reducerType + "_reduced.txt");
+                } else if (TableTool.reducerType.equals("all")) {
                     // 输出原始bug case
                     saveTestCase(testCase.toString(),
                             TableTool.bugPath + File.separator + "bug_" + TableTool.bugFound + "_origin.txt");
                     // 分别输出简化后的bug case
                     saveTestCase(reducedCaseOfAllRandom,
-                            TableTool.bugPath + File.separator + "bug_" + TableTool.bugFound +"_random_reduced.txt");
+                            TableTool.bugPath + File.separator + "bug_" + TableTool.bugFound + "_random_reduced.txt");
                     saveTestCase(reducedCaseOfAllProb,
-                            TableTool.bugPath + File.separator + "bug_" + TableTool.bugFound +"_probability-table_reduced.txt");
+                            TableTool.bugPath + File.separator + "bug_" + TableTool.bugFound
+                                    + "_probability-table_reduced.txt");
                     saveTestCase(reducedCaseOfAllEpsilon,
-                            TableTool.bugPath + File.separator + "bug_" + TableTool.bugFound +"_epsilon-greedy_reduced.txt");
+                            TableTool.bugPath + File.separator + "bug_" + TableTool.bugFound
+                                    + "_epsilon-greedy_reduced.txt");
                 }
                 TableTool.bugFound++;
             }
