@@ -71,6 +71,7 @@ public class Reducer {
     double[] addedSimplificationRate;
     // 统计数据
     StringBuffer statistics;
+
     public int getVaildReduceCount() {
         return vaildReduceCount;
     }
@@ -255,7 +256,6 @@ public class Reducer {
         // 第二层：*语句简化层*
         for (int i = 1; i <= maxReduceCount; i++) {
             SimplifyType typeForStmtSimplify = stmtSimplifySelector.selectNext();
-            // SimplifyType typeForStmtSimplify = SimplifyType.SIMPLIFY_TABLE;
             switch (typeForStmtSimplify.toString()) {
                 case "SIMPLIFY_TABLE":
                     // 简化表定义
@@ -298,13 +298,12 @@ public class Reducer {
 
         // 计算第四层之后的简化样例字符数
         lengthOfCase[4] += testCase.toString().length();
-        statistics.append(testCase.toString()+"\n\n");
-        statistics.append("Reducer Type:"+TableTool.reducerType+" Epsilon=0.7\n");
+        statistics.append(testCase.toString() + "\n\n");
+        statistics.append("Reducer Type:" + TableTool.reducerType + " Epsilon=0.7\n");
         // 获取简化统计数据
         getStatistics();
         String res = statistics.toString();
         statistics.delete(0, statistics.length());
-        System.out.println(res);
         return res;
     }
 
@@ -318,7 +317,7 @@ public class Reducer {
         // 打印有效简化率
         printReduceCountRate();
     }
-    
+
     public void calculateReduceCountRate() {
         allReduceCount = 0;
         vaildReduceCount = 0;
@@ -342,14 +341,16 @@ public class Reducer {
             // 每层的有效简化贡献率 ；每层的有效简化率
             log.info("{}th Level: Valid Reduce Rate Contrib. {}, Valid Reduce Rate {}", String.valueOf(i),
                     String.valueOf(reduceRateContribOfEachLevel[i]), String.valueOf(reduceRateForEachLevel[i]));
-            statistics.append(String.valueOf(i)+"th Level: Valid Reduce Rate Contrib.: "+String.valueOf(reduceRateContribOfEachLevel[i])
-                              +", Valid Reduce Rate: "+String.valueOf(reduceRateForEachLevel[i])+"\n");
+            statistics.append(String.valueOf(i) + "th Level: Valid Reduce Rate Contrib.: "
+                    + String.valueOf(reduceRateContribOfEachLevel[i])
+                    + ", Valid Reduce Rate: " + String.valueOf(reduceRateForEachLevel[i]) + "\n");
         }
-        for (int i=1;i<=4;i++){
-            statistics.append(String.valueOf(i)+"th Level: Valid Reduce Count: "+String.valueOf(validReduceCountForEachLevel[i])
-            +", Reduce Count: "+String.valueOf(reduceCountForEachLevel[i])+"\n");
+        for (int i = 1; i <= 4; i++) {
+            statistics.append(String.valueOf(i) + "th Level: Valid Reduce Count: "
+                    + String.valueOf(validReduceCountForEachLevel[i])
+                    + ", Reduce Count: " + String.valueOf(reduceCountForEachLevel[i]) + "\n");
         }
-        statistics.append("Total Valid Reduce Rate : "+String.valueOf(validReduceRate)+"\n");
+        statistics.append("Total Valid Reduce Rate : " + String.valueOf(validReduceRate) + "\n");
         log.info("Total Valid Reduce Rate {}", String.valueOf(validReduceRate));
         statistics.append("---------------------------Reudce Rate Statistics End  ---------------------------\n");
         log.info("---------------------------Reudce Rate Statistics End  ---------------------------");
@@ -357,14 +358,17 @@ public class Reducer {
 
     public void printSimplificationRate() {
         log.info("---------------------------Simplification Rate Statistics Start---------------------------");
-        statistics.append("---------------------------Simplification Rate Statistics Start---------------------------\n");
+        statistics
+                .append("---------------------------Simplification Rate Statistics Start---------------------------\n");
         for (int i = 1; i <= 4; i++) {
             log.info("{}th Level: Simplification Rate {}, Added Rate: {}", String.valueOf(i),
                     String.valueOf(simplificationRate[i]), String.valueOf(addedSimplificationRate[i]));
-            statistics.append(String.valueOf(i)+"th Level: Simplification Rate :"+String.valueOf(simplificationRate[i])+
-                              ", Added Rate :"+String.valueOf(addedSimplificationRate[i])+"\n");
+            statistics.append(
+                    String.valueOf(i) + "th Level: Simplification Rate :" + String.valueOf(simplificationRate[i]) +
+                            ", Added Rate :" + String.valueOf(addedSimplificationRate[i]) + "\n");
         }
-        statistics.append("---------------------------Simplification Rate Statistics End  ---------------------------\n");
+        statistics
+                .append("---------------------------Simplification Rate Statistics End  ---------------------------\n");
         log.info("---------------------------Simplification Rate Statistics End  ---------------------------");
     }
 
